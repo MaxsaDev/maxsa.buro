@@ -520,6 +520,7 @@ CREATE TABLE IF NOT EXISTS mx_system.user_offices
   id         SERIAL      PRIMARY KEY,
   user_id    text        NOT NULL,
   office_id  int         NOT NULL,
+  is_default boolean     NOT NULL DEFAULT FALSE,
   created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   created_by text        NOT NULL,
 
@@ -1032,6 +1033,66 @@ CREATE TRIGGER trg_offices_bu_set_updated_at
   BEFORE UPDATE ON mx_dic.offices
   FOR EACH ROW
   EXECUTE FUNCTION mx_global.set_updated_at();
+
+-- ============================================================
+-- ФУНКЦІЇ ТА ТРИГЕРИ: IS_DEFAULT ДЛЯ USER_OFFICES
+-- ============================================================
+
+DROP FUNCTION IF EXISTS mx_system.fn_user_offices_biu_is_default();
+DROP FUNCTION IF EXISTS mx_system.fn_user_offices_ad_is_default();
+
+CREATE OR REPLACE FUNCTION mx_system.fn_user_offices_biu_is_default()
+    RETURNS TRIGGER AS $$
+BEGIN
+    IF (TG_OP = 'INSERT') THEN
+        IF (SELECT COUNT(*) FROM mx_system.user_offices WHERE user_id = NEW.user_id) = 0 THEN
+            NEW.is_default := TRUE;
+        ELSE
+            NEW.is_default := FALSE;
+        END IF;
+    ELSIF (TG_OP = 'UPDATE' AND NEW.is_default = TRUE AND OLD.is_default = FALSE) THEN
+        UPDATE mx_system.user_offices
+        SET is_default = FALSE
+        WHERE user_id = NEW.user_id AND id != NEW.id;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION mx_system.fn_user_offices_ad_is_default()
+    RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.is_default = TRUE THEN
+        UPDATE mx_system.user_offices
+        SET is_default = TRUE
+        WHERE id = (
+            SELECT id
+            FROM mx_system.user_offices
+            WHERE user_id = OLD.user_id
+            ORDER BY id
+            LIMIT 1
+        );
+    END IF;
+
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_user_offices_biu_is_default ON mx_system.user_offices;
+DROP TRIGGER IF EXISTS trg_user_offices_ad_is_default ON mx_system.user_offices;
+
+CREATE TRIGGER trg_user_offices_biu_is_default
+    BEFORE INSERT OR UPDATE OF is_default
+    ON mx_system.user_offices
+    FOR EACH ROW
+EXECUTE FUNCTION mx_system.fn_user_offices_biu_is_default();
+
+CREATE TRIGGER trg_user_offices_ad_is_default
+    AFTER DELETE
+    ON mx_system.user_offices
+    FOR EACH ROW
+EXECUTE FUNCTION mx_system.fn_user_offices_ad_is_default();
 
 -- ============================================================
 -- ФУНКЦІЇ ТА ТРИГЕРИ: СИНХРОНІЗАЦІЯ АКТИВНОСТІ
@@ -1817,6 +1878,7 @@ SELECT
   (uo.id IS NOT NULL)                     AS office_is_assigned,
   (uo.id IS NOT NULL)
     AND o.is_active                       AS office_is_effective_active,
+  COALESCE(uo.is_default, FALSE)          AS office_is_default,
   uo.id                                   AS user_office_id,
   uo.created_at                           AS created_at,
   uo.created_by                           AS created_by
@@ -1840,7 +1902,8 @@ SELECT
   o.city                                  AS office_city,
   o.address                               AS office_address,
   o.phone                                 AS office_phone,
-  o.email                                 AS office_email
+  o.email                                 AS office_email,
+  uo.is_default                           AS office_is_default
 FROM
   mx_system.user_offices uo
   JOIN public."user" u
@@ -1850,6 +1913,7 @@ FROM
 WHERE
   o.is_active = TRUE
 ORDER BY
+  uo.is_default DESC,
   u.id,
   o.sort_order,
   o.id;

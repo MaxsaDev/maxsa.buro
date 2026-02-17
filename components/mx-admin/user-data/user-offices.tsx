@@ -1,12 +1,14 @@
 'use client';
 
-import { Building2 } from 'lucide-react';
+import { Building2, Heart } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { getUserOfficesDataAction } from '@/actions/mx-admin/user-data/get-user-offices-data';
+import { setDefaultUserOfficeAction } from '@/actions/mx-admin/user-data/set-default-user-office';
 import { toggleUserOfficeAction } from '@/actions/mx-admin/user-data/toggle-user-office';
+import { Button } from '@/components/ui/button';
 import { Item, ItemContent, ItemGroup, ItemMedia, ItemTitle } from '@/components/ui/item';
 import type { UserOfficeAdminView } from '@/interfaces/mx-system/user-offices';
 
@@ -19,6 +21,7 @@ export function UserOffices({ userId }: UserOfficesProps) {
   const [officesData, setOfficesData] = useState<UserOfficeAdminView[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [processingIds, setProcessingIds] = useState<Set<number>>(new Set());
+  const [defaultProcessingId, setDefaultProcessingId] = useState<number | null>(null);
 
   // Завантаження даних
   useEffect(() => {
@@ -38,7 +41,7 @@ export function UserOffices({ userId }: UserOfficesProps) {
     loadData();
   }, [userId]);
 
-  // Обробка кліку на офіс
+  // Обробка кліку на офіс (призначення/відкликання)
   const handleOfficeClick = async (office: UserOfficeAdminView) => {
     if (processingIds.has(office.office_id)) return;
 
@@ -52,7 +55,6 @@ export function UserOffices({ userId }: UserOfficesProps) {
       );
 
       if (result.status === 'success') {
-        // Оновлюємо дані
         const data = await getUserOfficesDataAction(userId);
         setOfficesData(data.offices);
 
@@ -71,6 +73,38 @@ export function UserOffices({ userId }: UserOfficesProps) {
         next.delete(office.office_id);
         return next;
       });
+    }
+  };
+
+  // Обробка кліку на кнопку Heart (офіс за замовчуванням)
+  const handleDefaultClick = async (
+    e: React.MouseEvent<HTMLButtonElement>,
+    office: UserOfficeAdminView
+  ) => {
+    e.stopPropagation();
+
+    if (office.office_is_default || defaultProcessingId !== null) return;
+
+    setDefaultProcessingId(office.office_id);
+
+    try {
+      const result = await setDefaultUserOfficeAction(userId, office.office_id);
+
+      if (result.status === 'success') {
+        const data = await getUserOfficesDataAction(userId);
+        setOfficesData(data.offices);
+
+        toast.success(result.message);
+
+        router.refresh();
+      } else {
+        toast.error(result.message);
+      }
+    } catch (error) {
+      console.error('[UserOffices] Помилка встановлення офісу за замовчуванням:', error);
+      toast.error('Не вдалося встановити офіс за замовчуванням');
+    } finally {
+      setDefaultProcessingId(null);
     }
   };
 
@@ -114,6 +148,26 @@ export function UserOffices({ userId }: UserOfficesProps) {
                       <p className="text-muted-foreground mt-1 text-xs">Офіс деактивовано</p>
                     )}
                   </ItemContent>
+                  {office.office_is_assigned && (
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      className={
+                        office.office_is_default
+                          ? 'text-destructive hover:text-destructive'
+                          : 'text-muted-foreground hover:text-destructive'
+                      }
+                      onClick={(e) => handleDefaultClick(e, office)}
+                      disabled={
+                        office.office_is_default || defaultProcessingId === office.office_id
+                      }
+                    >
+                      <Heart
+                        className="size-4"
+                        fill={office.office_is_default ? 'currentColor' : 'none'}
+                      />
+                    </Button>
+                  )}
                 </Item>
               );
             })}
