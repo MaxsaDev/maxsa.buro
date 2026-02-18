@@ -51,10 +51,7 @@ export async function getUserOfficesUserViewByUserId(
     const result = await client.query<UserOfficeUserView>(sql, [userId]);
     return result.rows;
   } catch (error) {
-    console.error(
-      '[getUserOfficesUserViewByUserId] Помилка отримання офісів користувача:',
-      error
-    );
+    console.error('[getUserOfficesUserViewByUserId] Помилка отримання офісів користувача:', error);
     throw new Error('Не вдалося отримати офіси користувача');
   } finally {
     client.release();

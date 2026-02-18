@@ -2,6 +2,7 @@ export interface NavUserItems {
   id: number;
   user_id: string;
   menu_id: number;
+  office_id: number;
   created_at: Date;
   created_by: string;
   is_auto_assigned: boolean;
@@ -9,6 +10,7 @@ export interface NavUserItems {
 
 export interface NavUserItemsUserView {
   user_id: string;
+  office_id: number;
 
   menu_id: number;
   menu_title: string;
@@ -25,6 +27,9 @@ export interface NavUserItemsUserView {
 export interface NavUserItemsAdminView {
   user_id: string;
   user_name: string;
+
+  office_id: number;
+  office_title: string;
 
   menu_id: number;
   menu_title: string;

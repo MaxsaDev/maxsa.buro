@@ -3,22 +3,22 @@
 import { revalidatePath } from 'next/cache';
 
 import {
-  deleteNavUserSections,
-  insertNavUserSectionsByUserId,
+  deleteNavUserSectionsByUserAndOffice,
+  insertNavUserSectionsByUserAndOffice,
 } from '@/data/mx-system/nav-user-sections';
 import type { ActionStatus } from '@/interfaces/action-status';
 import { getCurrentUser } from '@/lib/auth/auth-server';
 
 /**
- * Server Action для активації/деактивації пункту меню з секціями для користувача
+ * Server Action для активації/деактивації пункту меню з секціями для користувача в конкретному офісі
  */
 export async function toggleUserSectionMenuItemAction(
   userId: string,
   menuId: number,
+  officeId: number,
   isActive: boolean
 ): Promise<ActionStatus> {
   try {
-    // Перевірка авторизації
     const admin = await getCurrentUser();
 
     if (!admin) {
@@ -29,7 +29,6 @@ export async function toggleUserSectionMenuItemAction(
       };
     }
 
-    // Перевірка ролі адміністратора
     if (admin.role !== 'admin') {
       return {
         status: 'error',
@@ -39,22 +38,13 @@ export async function toggleUserSectionMenuItemAction(
     }
 
     if (isActive) {
-      // Активація: додаємо запис
-      await insertNavUserSectionsByUserId(userId, menuId, admin.id);
-      console.log(
-        `[toggleUserSectionMenuItemAction] Пункт меню ${menuId} активовано для користувача ${userId}`
-      );
+      await insertNavUserSectionsByUserAndOffice(userId, menuId, officeId, admin.id);
     } else {
-      // Деактивація: видаляємо запис
-      await deleteNavUserSections(userId, menuId);
-      console.log(
-        `[toggleUserSectionMenuItemAction] Пункт меню ${menuId} деактивовано для користувача ${userId}`
-      );
+      await deleteNavUserSectionsByUserAndOffice(userId, menuId, officeId);
     }
 
-    // Ревалідуємо сторінку адмін-панелі та layout для користувача
     revalidatePath(`/mx-admin/user-data/${userId}`);
-    revalidatePath('/(protected)', 'layout'); // Оновлюємо layout для оновлення меню користувача
+    revalidatePath('/(protected)', 'layout');
 
     return {
       status: 'success',
@@ -64,11 +54,7 @@ export async function toggleUserSectionMenuItemAction(
     console.error('[toggleUserSectionMenuItemAction] Помилка зміни статусу пункту меню:', error);
 
     if (error instanceof Error) {
-      return {
-        status: 'error',
-        message: error.message,
-        code: 'DB_ERROR',
-      };
+      return { status: 'error', message: error.message, code: 'DB_ERROR' };
     }
 
     return {

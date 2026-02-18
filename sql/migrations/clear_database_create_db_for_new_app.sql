@@ -414,15 +414,15 @@ CREATE INDEX IF NOT EXISTS idx_offices_city ON mx_dic.offices(city);
 -- MX_SYSTEM: ПРИЗНАЧЕННЯ МЕНЮ, ПОВНОВАЖЕНЬ ТА ОФІСІВ
 -- ============================================================
 
--- Призначення меню з секціями
+-- Призначення меню з секціями (прив'язано до офісу)
 CREATE TABLE IF NOT EXISTS mx_system.nav_user_sections
 (
   id         SERIAL      PRIMARY KEY,
   user_id    text        NOT NULL,
   menu_id    int         NOT NULL,
+  office_id  int         NOT NULL,
   created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   created_by text        NOT NULL,
-  is_auto_assigned boolean NOT NULL DEFAULT false,
 
   CONSTRAINT nav_user_sections_fk_user
     FOREIGN KEY (user_id)
@@ -439,26 +439,30 @@ CREATE TABLE IF NOT EXISTS mx_system.nav_user_sections
     REFERENCES mx_dic.menu_user_sections_items(id)
     ON DELETE CASCADE,
 
-  CONSTRAINT nav_user_sections_user_menu_unique
-    UNIQUE (user_id, menu_id)
+  CONSTRAINT nav_user_sections_fk_office
+    FOREIGN KEY (office_id)
+    REFERENCES mx_dic.offices(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT nav_user_sections_user_menu_office_unique
+    UNIQUE (user_id, menu_id, office_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_nav_user_sections_is_auto_assigned
-  ON mx_system.nav_user_sections(is_auto_assigned, menu_id)
-  WHERE is_auto_assigned = true;
+CREATE INDEX IF NOT EXISTS idx_nav_user_sections_user_office
+  ON mx_system.nav_user_sections(user_id, office_id);
 
-COMMENT ON COLUMN mx_system.nav_user_sections.is_auto_assigned IS
-  'Якщо true, меню було призначено автоматично через тригер при встановленні is_default = true. Такі меню будуть автоматично видалені при знятті is_default = false';
+COMMENT ON COLUMN mx_system.nav_user_sections.office_id IS
+  'Офіс, для якого діє цей дозвіл. Один пункт меню може бути активований для різних офісів незалежно.';
 
--- Призначення меню без секцій
+-- Призначення меню без секцій (прив'язано до офісу)
 CREATE TABLE IF NOT EXISTS mx_system.nav_user_items
 (
   id         SERIAL      NOT NULL PRIMARY KEY,
   user_id    text        NOT NULL,
   menu_id    int         NOT NULL,
+  office_id  int         NOT NULL,
   created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   created_by text        NOT NULL,
-  is_auto_assigned boolean NOT NULL DEFAULT false,
 
   CONSTRAINT nav_user_items_fk_user
     FOREIGN KEY (user_id)
@@ -475,16 +479,20 @@ CREATE TABLE IF NOT EXISTS mx_system.nav_user_items
     REFERENCES mx_dic.menu_user_items(id)
     ON DELETE CASCADE,
 
-  CONSTRAINT nav_user_items_user_menu_unique
-    UNIQUE (user_id, menu_id)
+  CONSTRAINT nav_user_items_fk_office
+    FOREIGN KEY (office_id)
+    REFERENCES mx_dic.offices(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT nav_user_items_user_menu_office_unique
+    UNIQUE (user_id, menu_id, office_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_nav_user_items_is_auto_assigned
-  ON mx_system.nav_user_items(is_auto_assigned, menu_id)
-  WHERE is_auto_assigned = true;
+CREATE INDEX IF NOT EXISTS idx_nav_user_items_user_office
+  ON mx_system.nav_user_items(user_id, office_id);
 
-COMMENT ON COLUMN mx_system.nav_user_items.is_auto_assigned IS
-  'Якщо true, меню було призначено автоматично через тригер при встановленні is_default = true. Такі меню будуть автоматично видалені при знятті is_default = false';
+COMMENT ON COLUMN mx_system.nav_user_items.office_id IS
+  'Офіс, для якого діє цей дозвіл. Один пункт меню може бути активований для різних офісів незалежно.';
 
 -- Призначення повноважень
 CREATE TABLE IF NOT EXISTS mx_system.nav_user_permissions
@@ -1146,155 +1154,18 @@ CREATE TRIGGER trg_user_permissions_category_au_sync_items_active
 
 -- ============================================================
 -- ФУНКЦІЇ ТА ТРИГЕРИ: МЕНЮ ЗА ЗАМОВЧУВАННЯМ
+-- (вимкнено — після додавання office_id до nav_user_sections/items
+--  автоматичне призначення стало неоднозначним: неможливо визначити,
+--  для якого офісу призначати. Меню призначається вручну в контексті офісу.)
 -- ============================================================
-
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_items_au_assign_default();
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_items_au_assign_default();
-
-CREATE OR REPLACE FUNCTION mx_dic.fn_menu_user_sections_items_au_assign_default()
-RETURNS TRIGGER AS $$
-DECLARE
-  v_category_id int;
-  v_category_is_active boolean;
-  v_menu_id int;
-  v_menu_is_active boolean;
-  v_system_user_id text;
-BEGIN
-  IF OLD.is_default = false AND NEW.is_default = true THEN
-    SELECT
-      c.id,
-      c.is_active,
-      m.id,
-      m.is_active
-    INTO
-      v_category_id,
-      v_category_is_active,
-      v_menu_id,
-      v_menu_is_active
-    FROM mx_dic.menu_user_sections_category c
-    INNER JOIN mx_dic.menus m ON m.id = c.menu_id
-    WHERE c.id = NEW.category_id;
-
-    SELECT id INTO v_system_user_id
-    FROM public."user"
-    WHERE role = 'admin'
-    ORDER BY "createdAt" ASC
-    LIMIT 1;
-
-    IF v_system_user_id IS NULL THEN
-      SELECT id INTO v_system_user_id
-      FROM public."user"
-      ORDER BY "createdAt" ASC
-      LIMIT 1;
-    END IF;
-
-    IF NEW.is_active = true
-       AND v_category_is_active = true
-       AND v_menu_is_active = true
-       AND v_system_user_id IS NOT NULL THEN
-
-      INSERT INTO mx_system.nav_user_sections (user_id, menu_id, created_by, is_auto_assigned)
-      SELECT
-        u.id,
-        NEW.id,
-        v_system_user_id,
-        true
-      FROM public."user" u
-      WHERE NOT EXISTS (
-        SELECT 1
-        FROM mx_system.nav_user_sections nus
-        WHERE nus.user_id = u.id
-          AND nus.menu_id = NEW.id
-      );
-    END IF;
-  END IF;
-
-  IF OLD.is_default = true AND NEW.is_default = false THEN
-    DELETE FROM mx_system.nav_user_sections
-    WHERE menu_id = NEW.id
-      AND is_auto_assigned = true;
-  END IF;
-
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION mx_dic.fn_menu_user_items_au_assign_default()
-RETURNS TRIGGER AS $$
-DECLARE
-  v_menu_is_active boolean;
-  v_system_user_id text;
-BEGIN
-  IF OLD.is_default = false AND NEW.is_default = true THEN
-    SELECT is_active
-    INTO v_menu_is_active
-    FROM mx_dic.menus
-    WHERE id = NEW.menu_id;
-
-    SELECT id INTO v_system_user_id
-    FROM public."user"
-    WHERE role = 'admin'
-    ORDER BY "createdAt" ASC
-    LIMIT 1;
-
-    IF v_system_user_id IS NULL THEN
-      SELECT id INTO v_system_user_id
-      FROM public."user"
-      ORDER BY "createdAt" ASC
-      LIMIT 1;
-    END IF;
-
-    IF NEW.is_active = true
-       AND v_menu_is_active = true
-       AND v_system_user_id IS NOT NULL THEN
-
-      INSERT INTO mx_system.nav_user_items (user_id, menu_id, created_by, is_auto_assigned)
-      SELECT
-        u.id,
-        NEW.id,
-        v_system_user_id,
-        true
-      FROM public."user" u
-      WHERE NOT EXISTS (
-        SELECT 1
-        FROM mx_system.nav_user_items nui
-        WHERE nui.user_id = u.id
-          AND nui.menu_id = NEW.id
-      );
-    END IF;
-  END IF;
-
-  IF OLD.is_default = true AND NEW.is_default = false THEN
-    DELETE FROM mx_system.nav_user_items
-    WHERE menu_id = NEW.id
-      AND is_auto_assigned = true;
-  END IF;
-
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_menu_user_sections_items_au_assign_default
   ON mx_dic.menu_user_sections_items;
 DROP TRIGGER IF EXISTS trg_menu_user_items_au_assign_default
   ON mx_dic.menu_user_items;
 
-CREATE TRIGGER trg_menu_user_sections_items_au_assign_default
-  AFTER UPDATE OF is_default ON mx_dic.menu_user_sections_items
-  FOR EACH ROW
-  WHEN (OLD.is_default IS DISTINCT FROM NEW.is_default)
-  EXECUTE FUNCTION mx_dic.fn_menu_user_sections_items_au_assign_default();
-
-CREATE TRIGGER trg_menu_user_items_au_assign_default
-  AFTER UPDATE OF is_default ON mx_dic.menu_user_items
-  FOR EACH ROW
-  WHEN (OLD.is_default IS DISTINCT FROM NEW.is_default)
-  EXECUTE FUNCTION mx_dic.fn_menu_user_items_au_assign_default();
-
-COMMENT ON FUNCTION mx_dic.fn_menu_user_sections_items_au_assign_default() IS
-  'Автоматично призначає пункт меню з секціями всім існуючим користувачам при встановленні is_default = true';
-COMMENT ON FUNCTION mx_dic.fn_menu_user_items_au_assign_default() IS
-  'Автоматично призначає пункт меню без секцій всім існуючим користувачам при встановленні is_default = true';
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_items_au_assign_default();
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_items_au_assign_default();
 
 -- ============================================================
 -- MX_DATA: ФУНКЦІЇ ТА ТРИГЕРИ
@@ -1647,156 +1518,198 @@ FROM public."user" u
 LEFT JOIN mx_data.user_data ud ON ud.user_id = u.id;
 
 -- mx_system.nav_user_sections_user_view
+-- Показує пункти меню для сайдбару — фільтрує за офісом is_default користувача
 CREATE OR REPLACE VIEW mx_system.nav_user_sections_user_view AS
 SELECT
-  u.id                                    AS user_id,
-  m.id                                    AS menu_id,
-  m.title                                 AS menu_title,
-  m.sort_order                            AS menu_sort_order,
-  c.id                                    AS category_id,
-  c.title                                 AS category_title,
-  c.url                                   AS category_url,
-  c.icon                                  AS category_icon,
-  c.is_active                             AS category_is_active,
-  i.id                                    AS item_id,
-  i.title                                 AS item_title,
-  i.icon                                  AS item_icon,
-  i.url                                   AS item_url,
-  i.sort_order                            AS item_sort_order,
-  i.is_active                             AS item_is_active_global
+    u.id                                    AS user_id,
+    uo.office_id                            AS office_id,
+
+    m.id                                    AS menu_id,
+    m.title                                 AS menu_title,
+    m.sort_order                            AS menu_sort_order,
+
+    c.id                                    AS category_id,
+    c.title                                 AS category_title,
+    c.url                                   AS category_url,
+    c.icon                                  AS category_icon,
+    c.is_active                             AS category_is_active,
+
+    i.id                                    AS item_id,
+    i.title                                 AS item_title,
+    i.icon                                  AS item_icon,
+    i.url                                   AS item_url,
+    i.sort_order                            AS item_sort_order,
+    i.is_active                             AS item_is_active_global
 FROM
-  mx_system.nav_user_sections nus
-  JOIN public."user" u
-    ON u.id = nus.user_id
-  JOIN mx_dic.menu_user_sections_items i
-    ON i.id = nus.menu_id
-  JOIN mx_dic.menu_user_sections_category c
-    ON c.id = i.category_id
-  JOIN mx_dic.menus m
-    ON m.id = c.menu_id
+    mx_system.nav_user_sections nus
+    JOIN public."user" u
+        ON u.id = nus.user_id
+    JOIN mx_system.user_offices uo
+        ON uo.user_id = nus.user_id
+       AND uo.office_id = nus.office_id
+       AND uo.is_default = TRUE
+    JOIN mx_dic.menu_user_sections_items i
+        ON i.id = nus.menu_id
+    JOIN mx_dic.menu_user_sections_category c
+        ON c.id = i.category_id
+    JOIN mx_dic.menus m
+        ON m.id = c.menu_id
 WHERE
-  m.is_active = TRUE
-  AND c.is_active = TRUE
-  AND i.is_active = TRUE
+    m.is_active = TRUE
+    AND c.is_active = TRUE
+    AND i.is_active = TRUE
 ORDER BY
-  u.id,
-  m.sort_order,
-  m.id,
-  c.id,
-  i.sort_order,
-  i.id;
+    u.id,
+    m.sort_order,
+    m.id,
+    c.id,
+    i.sort_order,
+    i.id;
 
 -- mx_system.nav_user_sections_admin_view
+-- 3D-матриця: user × office × menu_item (для адмін-панелі)
 CREATE OR REPLACE VIEW mx_system.nav_user_sections_admin_view AS
 SELECT
-  u.id                                    AS user_id,
-  u.name                                  AS user_name,
-  m.id                                    AS menu_id,
-  m.title                                 AS menu_title,
-  m.sort_order                            AS menu_sort_order,
-  c.id                                    AS category_id,
-  c.title                                 AS category_title,
-  c.url                                   AS category_url,
-  c.icon                                  AS category_icon,
-  c.is_active                             AS category_is_active,
-  i.id                                    AS item_id,
-  i.title                                 AS item_title,
-  i.icon                                  AS item_icon,
-  i.url                                   AS item_url,
-  i.sort_order                            AS item_sort_order,
-  i.is_active                             AS item_is_active_global,
-  (nus.id IS NOT NULL)                    AS item_is_assigned,
-  (nus.id IS NOT NULL)
-    AND i.is_active
-    AND c.is_active
-    AND m.is_active                       AS item_is_effective_active,
-  nus.id                                  AS nav_user_section_id,
-  nus.created_at                          AS created_at,
-  nus.created_by                          AS created_by
+    u.id                                    AS user_id,
+    u.name                                  AS user_name,
+
+    o.id                                    AS office_id,
+    o.title                                 AS office_title,
+
+    m.id                                    AS menu_id,
+    m.title                                 AS menu_title,
+    m.sort_order                            AS menu_sort_order,
+
+    c.id                                    AS category_id,
+    c.title                                 AS category_title,
+    c.url                                   AS category_url,
+    c.icon                                  AS category_icon,
+    c.is_active                             AS category_is_active,
+
+    i.id                                    AS item_id,
+    i.title                                 AS item_title,
+    i.icon                                  AS item_icon,
+    i.url                                   AS item_url,
+    i.sort_order                            AS item_sort_order,
+    i.is_active                             AS item_is_active_global,
+
+    (nus.id IS NOT NULL)                    AS item_is_assigned,
+    (nus.id IS NOT NULL)
+        AND i.is_active
+        AND c.is_active
+        AND m.is_active                     AS item_is_effective_active,
+
+    nus.id                                  AS nav_user_section_id,
+    nus.created_at                          AS created_at,
+    nus.created_by                          AS created_by
 FROM
-  public."user" u
-  CROSS JOIN mx_dic.menus m
-  JOIN mx_dic.menu_user_sections_category c
-    ON c.menu_id = m.id
-  JOIN mx_dic.menu_user_sections_items i
-    ON i.category_id = c.id
-  LEFT JOIN mx_system.nav_user_sections nus
-    ON nus.user_id = u.id
-   AND nus.menu_id = i.id
+    public."user" u
+    CROSS JOIN mx_dic.offices o
+    CROSS JOIN mx_dic.menus m
+    JOIN mx_dic.menu_user_sections_category c
+        ON c.menu_id = m.id
+    JOIN mx_dic.menu_user_sections_items i
+        ON i.category_id = c.id
+    LEFT JOIN mx_system.nav_user_sections nus
+        ON nus.user_id = u.id
+       AND nus.office_id = o.id
+       AND nus.menu_id = i.id
 ORDER BY
-  u.name,
-  m.sort_order,
-  m.id,
-  c.id,
-  i.sort_order,
-  i.id;
+    u.name,
+    o.sort_order,
+    o.id,
+    m.sort_order,
+    m.id,
+    c.id,
+    i.sort_order,
+    i.id;
 
 -- mx_system.nav_user_items_user_view
+-- Показує пункти меню для сайдбару — фільтрує за офісом is_default користувача
 CREATE OR REPLACE VIEW mx_system.nav_user_items_user_view AS
 SELECT
-  u.id                         AS user_id,
-  m.id                         AS menu_id,
-  m.title                      AS menu_title,
-  m.sort_order                 AS menu_sort_order,
-  i.id                         AS item_id,
-  i.title                      AS item_title,
-  i.icon                       AS item_icon,
-  i.url                        AS item_url,
-  i.sort_order                 AS item_sort_order,
-  i.is_active                  AS item_is_active_global
+    u.id                         AS user_id,
+    uo.office_id                 AS office_id,
+
+    m.id                         AS menu_id,
+    m.title                      AS menu_title,
+    m.sort_order                 AS menu_sort_order,
+
+    i.id                         AS item_id,
+    i.title                      AS item_title,
+    i.icon                       AS item_icon,
+    i.url                        AS item_url,
+    i.sort_order                 AS item_sort_order,
+    i.is_active                  AS item_is_active_global
 FROM
-  mx_system.nav_user_items nui
-  JOIN public."user" u
-    ON u.id = nui.user_id
-  JOIN mx_dic.menu_user_items i
-    ON i.id = nui.menu_id
-  JOIN mx_dic.menus m
-    ON m.id = i.menu_id
+    mx_system.nav_user_items nui
+    JOIN public."user" u
+        ON u.id = nui.user_id
+    JOIN mx_system.user_offices uo
+        ON uo.user_id = nui.user_id
+       AND uo.office_id = nui.office_id
+       AND uo.is_default = TRUE
+    JOIN mx_dic.menu_user_items i
+        ON i.id = nui.menu_id
+    JOIN mx_dic.menus m
+        ON m.id = i.menu_id
 WHERE
-  m.is_active = TRUE
-  AND i.is_active = TRUE
+    m.is_active = TRUE
+    AND i.is_active = TRUE
 ORDER BY
-  u.id,
-  m.sort_order,
-  m.id,
-  i.sort_order,
-  i.id;
+    u.id,
+    m.sort_order,
+    m.id,
+    i.sort_order,
+    i.id;
 
 -- mx_system.nav_user_items_admin_view
+-- 3D-матриця: user × office × menu_item (для адмін-панелі)
 CREATE OR REPLACE VIEW mx_system.nav_user_items_admin_view AS
 SELECT
-  u.id                         AS user_id,
-  u.name                       AS user_name,
-  m.id                         AS menu_id,
-  m.title                      AS menu_title,
-  m.sort_order                 AS menu_sort_order,
-  i.id                         AS item_id,
-  i.title                      AS item_title,
-  i.icon                       AS item_icon,
-  i.url                        AS item_url,
-  i.sort_order                 AS item_sort_order,
-  i.is_active                  AS item_is_active_global,
-  (nui.id IS NOT NULL)         AS item_is_assigned,
-  (nui.id IS NOT NULL)
-    AND i.is_active
-    AND m.is_active            AS item_is_effective_active,
-  nui.id                       AS nav_user_item_id,
-  nui.created_at               AS created_at,
-  nui.created_by               AS created_by
+    u.id                         AS user_id,
+    u.name                       AS user_name,
+
+    o.id                         AS office_id,
+    o.title                      AS office_title,
+
+    m.id                         AS menu_id,
+    m.title                      AS menu_title,
+    m.sort_order                 AS menu_sort_order,
+
+    i.id                         AS item_id,
+    i.title                      AS item_title,
+    i.icon                       AS item_icon,
+    i.url                        AS item_url,
+    i.sort_order                 AS item_sort_order,
+    i.is_active                  AS item_is_active_global,
+
+    (nui.id IS NOT NULL)         AS item_is_assigned,
+    (nui.id IS NOT NULL)
+        AND i.is_active
+        AND m.is_active          AS item_is_effective_active,
+
+    nui.id                       AS nav_user_item_id,
+    nui.created_at               AS created_at,
+    nui.created_by               AS created_by
 FROM
-  public."user" u
-  CROSS JOIN mx_dic.menus m
-  JOIN mx_dic.menu_user_items i
-    ON i.menu_id = m.id
-  LEFT JOIN mx_system.nav_user_items nui
-    ON nui.user_id = u.id
-   AND nui.menu_id = i.id
+    public."user" u
+    CROSS JOIN mx_dic.offices o
+    CROSS JOIN mx_dic.menus m
+    JOIN mx_dic.menu_user_items i
+        ON i.menu_id = m.id
+    LEFT JOIN mx_system.nav_user_items nui
+        ON nui.user_id = u.id
+       AND nui.office_id = o.id
+       AND nui.menu_id = i.id
 ORDER BY
-  u.name,
-  m.sort_order,
-  m.id,
-  i.sort_order,
-  i.id;
+    u.name,
+    o.sort_order,
+    o.id,
+    m.sort_order,
+    m.id,
+    i.sort_order,
+    i.id;
 
 -- mx_system.nav_user_permissions_admin_view
 CREATE OR REPLACE VIEW mx_system.nav_user_permissions_admin_view AS

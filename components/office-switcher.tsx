@@ -10,11 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from '@/components/ui/sidebar';
+import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import type { UserOfficeUserView } from '@/interfaces/mx-system/user-offices';
 
 interface OfficeSwitcherProps {
@@ -65,26 +61,16 @@ export const OfficeSwitcher = ({ offices }: OfficeSwitcherProps) => {
               <ChevronsUpDown className="ml-auto" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
-          <DropdownMenuContent
-            className="w-(--radix-dropdown-menu-trigger-width)"
-            align="start"
-          >
+          <DropdownMenuContent className="w-(--radix-dropdown-menu-trigger-width)" align="start">
             {offices.map((office) => (
-              <DropdownMenuItem
-                key={office.office_id}
-                onSelect={() => handleSelectOffice(office)}
-              >
+              <DropdownMenuItem key={office.office_id} onSelect={() => handleSelectOffice(office)}>
                 <div className="grid flex-1 leading-tight">
                   <span className="font-medium">{office.office_title}</span>
                   {office.office_city && (
-                    <span className="text-muted-foreground text-xs">
-                      {office.office_city}
-                    </span>
+                    <span className="text-muted-foreground text-xs">{office.office_city}</span>
                   )}
                 </div>
-                {office.office_id === selectedOffice.office_id && (
-                  <Check className="ml-auto" />
-                )}
+                {office.office_id === selectedOffice.office_id && <Check className="ml-auto" />}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>

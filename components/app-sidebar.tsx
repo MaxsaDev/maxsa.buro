@@ -56,10 +56,15 @@ export function AppSidebar({ user, appSupportMenu, userOffices, ...props }: AppS
     icon: getMenuIcon(item.icon) as LucideIcon,
   }));
 
-  const userProfileWithIcons = data.navUserProfile.map((item) => ({
-    ...item,
-    icon: getMenuIcon(item.icon) as LucideIcon,
-  }));
+  const userProfileWithIcons = [
+    ...(isAdmin
+      ? [{ ...data.navUserAdmin, icon: getMenuIcon(data.navUserAdmin.icon) as LucideIcon }]
+      : []),
+    ...data.navUserProfile.map((item) => ({
+      ...item,
+      icon: getMenuIcon(item.icon) as LucideIcon,
+    })),
+  ];
 
   return (
     <Sidebar variant="inset" {...props}>

@@ -30,10 +30,7 @@ export async function setMyDefaultOfficeAction(officeId: number): Promise<Action
       message: 'Офіс за замовчуванням успішно змінено',
     };
   } catch (error) {
-    console.error(
-      '[setMyDefaultOfficeAction] Помилка зміни офісу за замовчуванням:',
-      error
-    );
+    console.error('[setMyDefaultOfficeAction] Помилка зміни офісу за замовчуванням:', error);
 
     if (error instanceof Error) {
       return {

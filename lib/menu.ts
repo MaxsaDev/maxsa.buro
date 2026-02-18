@@ -86,6 +86,14 @@ export const menuAdmin = {
 };
 
 export const menuUser = {
+  // Пункт адмін-панелі для персонального меню (тільки для адміністраторів)
+  navUserAdmin: {
+    id: 6100,
+    title: 'Управління',
+    url: '/mx-admin',
+    icon: 'LayoutDashboard',
+  },
+
   // Меню користувача з профілем та налаштуваннями
   navUserProfile: [
     {
