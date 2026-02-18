@@ -19,7 +19,7 @@ export default async function Page() {
 
   // Перевірка ролі адміністратора
   if (user.role !== 'admin') {
-    redirect('/dashboard');
+    redirect('/mx-job');
   }
 
   const userData = await getUserDataWithContactView();

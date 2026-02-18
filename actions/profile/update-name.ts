@@ -88,7 +88,7 @@ export const updateNameAction = async (
 
     // Ревалідуємо сторінки з інформацією про користувача
     revalidatePath('/profile');
-    revalidatePath('/dashboard');
+    revalidatePath('/mx-job');
 
     return {
       status: 'success',

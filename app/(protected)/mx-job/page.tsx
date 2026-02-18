@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useUser } from '@/lib/auth/user-context';
 
-export default function DashboardPage() {
+export default function MxJobPage() {
   // Отримуємо користувача з context (авторизація перевіряється в layout)
   const user = useUser();
 
@@ -15,7 +15,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       {/* Заголовок */}
       <div>
-        <h1 className="text-3xl font-bold">Dashboard</h1>
+        <h1 className="text-3xl font-bold">Робочий простір</h1>
         <p className="text-muted-foreground mt-2">
           Ласкаво просимо, <span className="font-medium">{user.name}</span>!
         </p>

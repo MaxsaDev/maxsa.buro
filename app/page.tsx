@@ -48,7 +48,7 @@ export default function HomePage() {
                 <h3 className="text-sm font-medium">Захищені сторінки</h3>
                 <div className="grid gap-2">
                   <Button asChild className="justify-start">
-                    <Link href="/dashboard">Dashboard (користувач)</Link>
+                    <Link href="/mx-job">Робочий простір (користувач)</Link>
                   </Button>
                   <Button asChild className="justify-start">
                     <Link href="/profile">Профіль користувача</Link>

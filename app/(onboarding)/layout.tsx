@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 /**
  * Layout для сторінок онбордингу
  * Легкий layout без sidebar/меню — тільки авторизація + UserProvider
- * Якщо онбординг вже завершено — перенаправляємо на dashboard
+ * Якщо онбординг вже завершено — перенаправляємо на mx-job
  */
 export default async function OnboardingLayout({ children }: { children: React.ReactNode }) {
   const sessionUser = (await getCurrentUser()) as ExtendedUser | null;
@@ -30,10 +30,10 @@ export default async function OnboardingLayout({ children }: { children: React.R
     image: dbUser.image || null,
   };
 
-  // Якщо онбординг вже завершено — перенаправляємо на dashboard
+  // Якщо онбординг вже завершено — перенаправляємо на mx-job
   const onboardingDone = await isOnboardingComplete(user.id);
   if (onboardingDone) {
-    redirect('/dashboard');
+    redirect('/mx-job');
   }
 
   return <UserProvider user={user}>{children}</UserProvider>;

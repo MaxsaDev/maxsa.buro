@@ -30,7 +30,7 @@ export default async function Page({ params }: Props) {
 
   // Перевірка ролі адміністратора
   if (user.role !== 'admin') {
-    redirect('/dashboard');
+    redirect('/mx-job');
   }
 
   // Отримуємо дані користувача

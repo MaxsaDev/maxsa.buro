@@ -20,7 +20,7 @@ export default async function AdminPage() {
 
   // Перевірка ролі адміністратора
   if (user.role !== 'admin') {
-    redirect('/dashboard');
+    redirect('/mx-job');
   }
 
   // Отримуємо всіх користувачів
@@ -135,7 +135,7 @@ export default async function AdminPage() {
         <CardContent>
           <div className="grid gap-3 md:grid-cols-2">
             <Button asChild variant="outline">
-              <Link href="/dashboard">Повернутися до Dashboard</Link>
+              <Link href="/mx-job">Повернутися до робочого простору</Link>
             </Button>
             <Button asChild variant="outline">
               <Link href="/profile">Мій профіль</Link>
