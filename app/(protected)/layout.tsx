@@ -10,6 +10,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/s
 import { getUserById } from '@/data/auth/users';
 import { isOnboardingComplete } from '@/data/mx-data/onboarding';
 import { getMenuAppSupport } from '@/data/mx-dic/menu-admin';
+import { getUserOfficesUserViewByUserId } from '@/data/mx-system/user-offices';
 import { getCurrentUser } from '@/lib/auth/auth-server';
 import type { ExtendedUser } from '@/lib/auth/auth-types';
 import { UserProvider } from '@/lib/auth/user-context';
@@ -54,10 +55,11 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   }
 
   // Завантажуємо меню користувача, повноваження та меню підтримки з БД
-  const [userMenu, userPermissions, appSupportMenu] = await Promise.all([
+  const [userMenu, userPermissions, appSupportMenu, userOffices] = await Promise.all([
     buildUserMenu(user.id),
     getUserPermissions(user.id),
     getMenuAppSupport(),
+    getUserOfficesUserViewByUserId(user.id),
   ]);
 
   // Фільтруємо тільки активні пункти меню підтримки
@@ -84,7 +86,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
       <MenuProvider initialSections={navSections} initialItems={navItems}>
         <PermissionsProvider initialPermissions={userPermissions}>
           <SidebarProvider>
-            <AppSidebar user={user} appSupportMenu={activeAppSupport} />
+            <AppSidebar user={user} appSupportMenu={activeAppSupport} userOffices={userOffices} />
             <SidebarInset>
               <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
                 <div className="flex w-full items-center gap-2 px-4">

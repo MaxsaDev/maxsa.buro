@@ -2,12 +2,14 @@
 
 import { Command } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import * as React from 'react';
 
 import { NavItems } from '@/components/nav-items';
 import { NavSecondary } from '@/components/nav-secondary';
 import { NavSections } from '@/components/nav-sections';
 import { NavUser } from '@/components/nav-user';
+import { OfficeSwitcher } from '@/components/office-switcher';
 import {
   Sidebar,
   SidebarContent,
@@ -23,6 +25,7 @@ import { data } from '@/lib';
 import { buildAvatarUrl } from '@/lib/avatar/build-avatar-url';
 import type { ExtendedUser } from '@/lib/auth/auth-types';
 import { getMenuIcon } from '@/lib/icon/get-menu-icon';
+import type { UserOfficeUserView } from '@/interfaces/mx-system/user-offices';
 import { useUserMenuStore } from '@/store/user-menu/user-menu-store';
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
@@ -33,11 +36,16 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
     url: string;
     icon: string;
   }>;
+  userOffices: UserOfficeUserView[];
 }
 
-export function AppSidebar({ user, appSupportMenu, ...props }: AppSidebarProps) {
+export function AppSidebar({ user, appSupportMenu, userOffices, ...props }: AppSidebarProps) {
   // Визначаємо, чи є користувач адміністратором
   const isAdmin = user.role === 'admin';
+
+  // Визначаємо, чи знаходимось на адміністративній сторінці
+  const pathname = usePathname();
+  const isAdminRoute = pathname.startsWith('/mx-admin');
 
   // Завжди використовуємо меню з Zustand store (користувацьке меню з БД)
   const storeSections = useUserMenuStore((state) => state.sections);
@@ -56,23 +64,27 @@ export function AppSidebar({ user, appSupportMenu, ...props }: AppSidebarProps) 
   return (
     <Sidebar variant="inset" {...props}>
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link href="/dashboard">
-                <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                  <Command className="size-4" />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">MAXSA SP</span>
-                  <span className="truncate text-xs">
-                    {isAdmin ? 'Адміністратор' : 'Enterprise'}
-                  </span>
-                </div>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        {!isAdminRoute && userOffices.length > 0 ? (
+          <OfficeSwitcher offices={userOffices} />
+        ) : (
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton size="lg" asChild>
+                <Link href="/dashboard">
+                  <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
+                    <Command className="size-4" />
+                  </div>
+                  <div className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-semibold">MAXSA SP</span>
+                    <span className="truncate text-xs">
+                      {isAdmin ? 'Адміністратор' : 'Enterprise'}
+                    </span>
+                  </div>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        )}
       </SidebarHeader>
       <SidebarContent>
         {/* ============================================ */}

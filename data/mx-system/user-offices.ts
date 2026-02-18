@@ -1,4 +1,8 @@
-import type { UserOffice, UserOfficeAdminView } from '@/interfaces/mx-system/user-offices';
+import type {
+  UserOffice,
+  UserOfficeAdminView,
+  UserOfficeUserView,
+} from '@/interfaces/mx-system/user-offices';
 import { pool } from '@/lib/db';
 
 /**
@@ -24,6 +28,34 @@ export async function getUserOfficesAdminViewByUserId(
       error
     );
     throw new Error('Не вдалося отримати офіси користувача для адміністратора');
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Отримати призначені активні офіси для користувача
+ * Використовує VIEW: mx_system.user_offices_user_view
+ */
+export async function getUserOfficesUserViewByUserId(
+  userId: string
+): Promise<UserOfficeUserView[]> {
+  const client = await pool.connect();
+  try {
+    const sql = `
+      SELECT *
+      FROM mx_system.user_offices_user_view
+      WHERE user_id = $1
+      ORDER BY office_is_default DESC, office_id;
+    `;
+    const result = await client.query<UserOfficeUserView>(sql, [userId]);
+    return result.rows;
+  } catch (error) {
+    console.error(
+      '[getUserOfficesUserViewByUserId] Помилка отримання офісів користувача:',
+      error
+    );
+    throw new Error('Не вдалося отримати офіси користувача');
   } finally {
     client.release();
   }

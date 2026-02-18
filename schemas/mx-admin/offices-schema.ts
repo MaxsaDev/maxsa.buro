@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { COUNTRY_CODES } from '@/lib/regexp';
+
 /**
  * Схема валідації для назви офісу / філії
  *
@@ -51,8 +53,24 @@ export const officeEmailSchema = z
  * Схема валідації для телефону офісу
  *
  * Правила:
- * - Максимум 50 символів
+ * - Може бути порожнім
+ * - Формат: +{код країни}{9-10 цифр}, без пробілів та дефісів
+ * - Код країни має бути з дозволеного списку COUNTRY_CODES
  */
 export const officePhoneSchema = z
   .string()
-  .max(50, { message: 'Номер телефону не може бути довшим за 50 символів' });
+  .max(50, { message: 'Номер телефону не може бути довшим за 50 символів' })
+  .refine(
+    (val) => {
+      if (val.trim() === '') return true;
+      if (!/^\+\d+$/.test(val)) return false;
+      const digits = val.slice(1);
+      const sortedCodes = [...COUNTRY_CODES].sort((a, b) => b.length - a.length);
+      return sortedCodes.some((code) => {
+        if (!digits.startsWith(code)) return false;
+        const rest = digits.slice(code.length);
+        return rest.length >= 9 && rest.length <= 10;
+      });
+    },
+    { message: 'Некоректний номер телефону. Введіть у форматі +380XXXXXXXXX' }
+  );
