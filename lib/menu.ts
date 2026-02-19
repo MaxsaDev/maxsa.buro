@@ -86,6 +86,48 @@ export const menuAdmin = {
 };
 
 export const menuUser = {
+  // Основна навігація для зареєстрованого адміністратора в просторі /mx-job
+  navRegisteredAdminMxJob: [
+    {
+      id: 6201,
+      title: 'Головна',
+      url: '/',
+      icon: 'Home',
+    },
+    {
+      id: 6202,
+      title: 'Адміністратор',
+      url: '/mx-admin',
+      icon: 'Shield',
+    },
+  ],
+
+  // Основна навігація для зареєстрованого адміністратора в просторі /mx-admin
+  navRegisteredAdminMxAdmin: [
+    {
+      id: 6203,
+      title: 'Головна',
+      url: '/',
+      icon: 'Home',
+    },
+    {
+      id: 6204,
+      title: 'Робоча панель',
+      url: '/mx-job',
+      icon: 'LayoutDashboard',
+    },
+  ],
+
+  // Основна навігація для зареєстрованого користувача в просторі /mx-job
+  navRegisteredUserMxJob: [
+    {
+      id: 6205,
+      title: 'Головна',
+      url: '/',
+      icon: 'Home',
+    },
+  ],
+
   // Пункт адмін-панелі для персонального меню (тільки для адміністраторів)
   navUserAdmin: {
     id: 6100,

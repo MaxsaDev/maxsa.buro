@@ -66,6 +66,18 @@ export function AppSidebar({ user, appSupportMenu, userOffices, ...props }: AppS
     })),
   ];
 
+  const registeredNavigationItems = (
+    isAdmin
+      ? isAdminRoute
+        ? data.navRegisteredAdminMxAdmin
+        : data.navRegisteredAdminMxJob
+      : data.navRegisteredUserMxJob
+  ).map((item) => ({
+    name: item.title,
+    url: item.url,
+    icon: getMenuIcon(item.icon) as LucideIcon,
+  }));
+
   return (
     <Sidebar variant="inset" {...props}>
       <SidebarHeader>
@@ -215,6 +227,20 @@ export function AppSidebar({ user, appSupportMenu, userOffices, ...props }: AppS
         )}
       </SidebarContent>
       <SidebarFooter>
+        {registeredNavigationItems.length > 0 && (
+          <SidebarMenu>
+            {registeredNavigationItems.map((item) => (
+              <SidebarMenuItem key={item.name}>
+                <SidebarMenuButton asChild>
+                  <Link href={item.url}>
+                    <item.icon />
+                    <span>{item.name}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        )}
         <NavUser
           user={{
             name: user.name,

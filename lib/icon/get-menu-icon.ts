@@ -120,6 +120,8 @@ export const menuIconMap: Record<string, ComponentType<{ className?: string }>> 
   UserStar,
   UserX,
   User,
+  LayoutDashboard,
+
   // Профільні іконки
   BadgeCheck,
   CreditCard,
