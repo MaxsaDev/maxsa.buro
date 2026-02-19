@@ -21,11 +21,11 @@ import {
 } from '@/components/ui/sidebar';
 import type { LucideIcon } from 'lucide-react';
 
-import { data } from '@/lib';
-import { buildAvatarUrl } from '@/lib/avatar/build-avatar-url';
-import type { ExtendedUser } from '@/lib/auth/auth-types';
-import { getMenuIcon } from '@/lib/icon/get-menu-icon';
 import type { UserOfficeUserView } from '@/interfaces/mx-system/user-offices';
+import { data } from '@/lib';
+import type { ExtendedUser } from '@/lib/auth/auth-types';
+import { buildAvatarUrl } from '@/lib/avatar/build-avatar-url';
+import { getMenuIcon } from '@/lib/icon/get-menu-icon';
 import { useUserMenuStore } from '@/store/user-menu/user-menu-store';
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
@@ -92,7 +92,7 @@ export function AppSidebar({ user, appSupportMenu, userOffices, ...props }: AppS
                     <Command className="size-4" />
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold">MAXSA SP</span>
+                    <span className="truncate font-semibold">MAXSA BURO</span>
                     <span className="truncate text-xs">
                       {isAdmin ? 'Адміністратор' : 'Enterprise'}
                     </span>

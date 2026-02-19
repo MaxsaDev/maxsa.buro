@@ -1,6 +1,6 @@
 {
-  "name": "maxsa",
-  "version": "1.10.1",
+  "name": "Maxsa Buro",
+  "version": "0.0.1",
   "private": true,
   "scripts": {
     "dev": "next dev",

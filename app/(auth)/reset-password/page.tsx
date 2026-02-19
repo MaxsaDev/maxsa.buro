@@ -13,7 +13,7 @@ export default function ResetPasswordPage() {
           <div className="bg-primary text-primary-foreground flex size-6 items-center justify-center rounded-md">
             <Flower className="size-4" />
           </div>
-          Maxsa SP
+          Maxsa Buro
         </Link>
         <Suspense
           fallback={

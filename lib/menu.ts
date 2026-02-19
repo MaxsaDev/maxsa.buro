@@ -63,26 +63,30 @@ export const menuAdmin = {
   ],
 
   // Меню адміністратора з загальними пунктами
-  navAdminItems: [
-    {
-      id: 2101,
-      name: 'Адмін пункт 1',
-      url: '#',
-      icon: 'Shield',
-    },
-    {
-      id: 2102,
-      name: 'Адмін пункт 2',
-      url: '#',
-      icon: 'Shield',
-    },
-    {
-      id: 2103,
-      name: 'Адмін пункт 3',
-      url: '#',
-      icon: 'Shield',
-    },
-  ],
+  navAdminItems: [] as Array<{
+    id: number;
+    name: string;
+    url: string;
+    icon: string;
+  }>,
+  // {
+  //   id: 2101,
+  //   name: 'Адмін пункт 1',
+  //   url: '#',
+  //   icon: 'Shield',
+  // },
+  // {
+  //   id: 2102,
+  //   name: 'Адмін пункт 2',
+  //   url: '#',
+  //   icon: 'Shield',
+  // },
+  // {
+  //   id: 2103,
+  //   name: 'Адмін пункт 3',
+  //   url: '#',
+  //   icon: 'Shield',
+  // },
 };
 
 export const menuUser = {

@@ -118,7 +118,7 @@ export const TwoFactorSetupComponent = ({ isEnabled, onStatusChange }: TwoFactor
       // Викликаємо офіційний Better Auth API
       const result = await authClient.twoFactor.enable({
         password: data.password,
-        issuer: process.env.NEXT_PUBLIC_APP_NAME || 'Maxsa SP',
+        issuer: process.env.NEXT_PUBLIC_APP_NAME || 'Maxsa Buro',
       });
 
       // Детальне логування відповіді

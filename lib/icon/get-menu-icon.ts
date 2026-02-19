@@ -40,6 +40,7 @@ import {
   Globe,
   Grid,
   HandCoins,
+  HandPlatter,
   Heart,
   Home,
   HousePlus,
@@ -176,6 +177,7 @@ export const menuIconMap: Record<string, ComponentType<{ className?: string }>> 
   Info,
   AlertCircle,
   Toolbox,
+  HandPlatter,
 
   // Бізнес та аналітика
   BarChart,

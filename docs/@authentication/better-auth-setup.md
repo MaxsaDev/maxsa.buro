@@ -100,7 +100,7 @@ const createAuthConfig = (): BetterAuthOptions => ({
   // ========================================
   // APP CONFIG
   // ========================================
-  appName: process.env.NEXT_PUBLIC_APP_NAME || 'Maxsa SP',
+  appName: process.env.NEXT_PUBLIC_APP_NAME || 'Maxsa Buro',
   baseURL: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
 
   // ========================================
@@ -160,7 +160,7 @@ const createAuthConfig = (): BetterAuthOptions => ({
 
     // Two-Factor (TOTP) authentication
     twoFactor({
-      issuer: process.env.NEXT_PUBLIC_APP_NAME || 'Maxsa SP',
+      issuer: process.env.NEXT_PUBLIC_APP_NAME || 'Maxsa Buro',
     }),
 
     // Next.js cookie handling - МАЄ БУТИ ОСТАННІМ!
@@ -347,7 +347,7 @@ BETTER_AUTH_SECRET="your-super-secret-key-minimum-32-characters"
 # ========================================
 # APP CONFIG
 # ========================================
-NEXT_PUBLIC_APP_NAME="Maxsa SP"
+NEXT_PUBLIC_APP_NAME="Maxsa Buro"
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
 
 # В production:
@@ -369,7 +369,7 @@ GOOGLE_CLIENT_SECRET="your-google-client-secret"
 # WEBAUTHN (Passkey)
 # ========================================
 # Development
-NEXT_PUBLIC_RP_NAME="Maxsa SP"
+NEXT_PUBLIC_RP_NAME="Maxsa Buro"
 NEXT_PUBLIC_RP_ID="localhost"
 NEXT_PUBLIC_ORIGIN="http://localhost:3000"
 

@@ -13,7 +13,7 @@ export default function HomePage() {
           <div className="bg-primary text-primary-foreground flex h-8 w-8 items-center justify-center rounded-md">
             <Flower className="size-5" />
           </div>
-          <span className="text-2xl font-semibold">Maxsa SP</span>
+          <span className="text-2xl font-semibold">Maxsa Buro</span>
         </div>
 
         {/* Картка з кнопками навігації */}
