@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## CRITICAL: Project Boundaries
+
+**This session's working directory is `/Users/maxsa/Work/maxsa.dev/maxsa.buro`.**
+
+- NEVER read, write, or copy files outside of this directory without explicit user confirmation.
+- NEVER edit files in sibling projects (`maxsa`, `maxsa-01`, etc.) even if context from a previous session referenced those paths.
+- Before any file write, verify the absolute path starts with `/Users/maxsa/Work/maxsa.dev/maxsa.buro/`.
+- If a summarized context contains paths from another project, treat them as reference only — re-implement changes locally in this project.
+
 ## Tech Stack
 
 - **Next.js 16** (App Router) with **React 19** and **React Compiler** (stable)

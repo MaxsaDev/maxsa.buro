@@ -2,8 +2,8 @@
 
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Trash2 } from 'lucide-react';
-import { useTransition } from 'react';
+import { ChevronDown, GripVertical, HousePlus, MapPin, Trash2 } from 'lucide-react';
+import { useState, useTransition } from 'react';
 
 import { createOfficeAction } from '@/actions/mx-admin/offices/create-office';
 import { deleteOfficeAction } from '@/actions/mx-admin/offices/delete-office';
@@ -36,11 +36,12 @@ import type { Office } from '@/interfaces/mx-dic/offices';
 import { showNotification } from '@/lib/notifications';
 import {
   officeEmailSchema,
+  officeLatitudeSchema,
+  officeLongitudeSchema,
   officePhoneSchema,
   officeTextFieldSchema,
   officeTitleSchema,
 } from '@/schemas/mx-admin/offices-schema';
-import { HousePlus } from 'lucide-react';
 import { SortableMenuWrapper } from '../menu/sortable-menu-wrapper';
 import { AddOfficeForm } from './add-office-form';
 
@@ -60,6 +61,7 @@ function SortableOfficeItem({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: office.id,
   });
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -69,6 +71,7 @@ function SortableOfficeItem({
 
   return (
     <div ref={setNodeRef} style={style} className="mb-1.5">
+      {/* Основний рядок */}
       <div className="border-border flex items-center gap-2 rounded-md border px-3 py-2">
         {/* Drag handle */}
         <div
@@ -136,7 +139,8 @@ function SortableOfficeItem({
             }}
             placeholder="Телефон"
             type="text"
-            className="hidden flex-1 lg:flex"
+            className="hidden max-w-36 lg:flex"
+            // className="hidden flex-1 lg:flex"
           />
           <EditDbMaxsa
             id={office.id}
@@ -155,6 +159,28 @@ function SortableOfficeItem({
 
         {/* Дії */}
         <div className="flex shrink-0 items-center gap-1.5">
+          {/* Кнопка розгортання додаткових полів */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-muted-foreground size-8"
+                  aria-label={isExpanded ? 'Згорнути деталі' : 'Розгорнути деталі'}
+                  onClick={() => setIsExpanded((prev) => !prev)}
+                >
+                  <ChevronDown
+                    className={`size-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                  />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {isExpanded ? 'Згорнути деталі' : 'Розгорнути деталі'}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
           <Switch
             checked={office.is_active}
             onCheckedChange={(checked) => onToggleActive?.(office.id, checked)}
@@ -202,6 +228,66 @@ function SortableOfficeItem({
           </TooltipProvider>
         </div>
       </div>
+
+      {/* Додаткові поля (розгортаються) */}
+      {isExpanded && (
+        <div className="border-border mt-1 ml-6 flex flex-row flex-wrap items-center gap-2 rounded-md border border-dashed px-3 py-2">
+          <MapPin className="text-muted-foreground size-4 shrink-0" />
+          <EditDbMaxsa
+            id={office.id}
+            value={office.link_map || ''}
+            schema={officeTextFieldSchema}
+            onSave={async (id, value) => {
+              if (typeof id !== 'number')
+                return { status: 'error', message: 'Невірний ID', code: 'INVALID_ID' };
+              return updateOfficeFieldAction(id, 'link_map', value);
+            }}
+            placeholder="Посилання на карту"
+            type="text"
+            className="min-w-48 flex-1"
+          />
+
+          <EditDbMaxsa
+            id={office.id}
+            value={office.latitude != null ? String(office.latitude) : ''}
+            schema={officeLatitudeSchema}
+            onSave={async (id, value) => {
+              if (typeof id !== 'number')
+                return { status: 'error', message: 'Невірний ID', code: 'INVALID_ID' };
+              return updateOfficeFieldAction(id, 'latitude', value);
+            }}
+            placeholder="Широта"
+            type="text"
+            className="w-36 shrink-0"
+          />
+          <EditDbMaxsa
+            id={office.id}
+            value={office.longitude != null ? String(office.longitude) : ''}
+            schema={officeLongitudeSchema}
+            onSave={async (id, value) => {
+              if (typeof id !== 'number')
+                return { status: 'error', message: 'Невірний ID', code: 'INVALID_ID' };
+              return updateOfficeFieldAction(id, 'longitude', value);
+            }}
+            placeholder="Довгота"
+            type="text"
+            className="w-36 shrink-0"
+          />
+          <EditDbMaxsa
+            id={office.id}
+            value={office.zip || ''}
+            schema={officeTextFieldSchema}
+            onSave={async (id, value) => {
+              if (typeof id !== 'number')
+                return { status: 'error', message: 'Невірний ID', code: 'INVALID_ID' };
+              return updateOfficeFieldAction(id, 'zip', value);
+            }}
+            placeholder="Поштовий індекс"
+            type="text"
+            className="w-40 shrink-0"
+          />
+        </div>
+      )}
     </div>
   );
 }
