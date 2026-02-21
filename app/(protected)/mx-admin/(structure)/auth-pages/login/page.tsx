@@ -1,6 +1,7 @@
-import { ArrowLeft, Flower } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
+import { AppIcon } from '@/components/app-icon';
 import { LoginForm } from '@/components/auth/login-form';
 import { Button } from '@/components/ui/button';
 
@@ -17,7 +18,7 @@ export default function LoginPage() {
           </Button>
           <Link href="/" className="flex items-center gap-2 font-medium">
             <div className="bg-primary text-primary-foreground flex size-6 items-center justify-center rounded-md">
-              <Flower className="size-4" />
+              <AppIcon className="size-4" />
             </div>
             Maxsa Buro
           </Link>

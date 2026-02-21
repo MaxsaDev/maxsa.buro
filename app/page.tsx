@@ -1,5 +1,6 @@
-import { Flower } from 'lucide-react';
 import Link from 'next/link';
+
+import { AppIcon } from '@/components/app-icon';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,7 +12,7 @@ export default function HomePage() {
         {/* Лого */}
         <div className="flex items-center justify-center gap-2 font-medium">
           <div className="bg-primary text-primary-foreground flex h-8 w-8 items-center justify-center rounded-md">
-            <Flower className="size-5" />
+            <AppIcon className="size-5" />
           </div>
           <span className="text-2xl font-semibold">Maxsa Buro</span>
         </div>
