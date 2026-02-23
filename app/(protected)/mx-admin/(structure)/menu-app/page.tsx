@@ -34,8 +34,9 @@ export default async function Page() {
   // Знаходимо ID типів меню
   const sectionsMenuTypeId = menuTypes.find((type) => type.code === 'sections')?.id || 1;
   const itemsMenuTypeId = menuTypes.find((type) => type.code === 'items')?.id || 2;
+  const generalMenuTypeId = menuTypes.find((type) => type.code === 'general')?.id || 3;
 
-  // Знаходимо ID меню поддержки
+  // Знаходимо ID меню підтримки
   const appSupportMenuId =
     appSupport.length > 0
       ? appSupport[0].menu_id
@@ -43,18 +44,15 @@ export default async function Page() {
         menusItems[0]?.id ||
         0;
 
-  // Знаходимо ID загального меню
-  const generalMenuId =
-    generalItems.length > 0 ? generalItems[0].menu_id : menusGeneral[0]?.id || 0;
-
   return (
     <MenuTabsWrapper
       menusSections={menusSections}
       menusItems={menusItems}
+      menusGeneral={menusGeneral}
       appSupportMenuId={appSupportMenuId}
-      generalMenuId={generalMenuId}
       sectionsMenuTypeId={sectionsMenuTypeId}
       itemsMenuTypeId={itemsMenuTypeId}
+      generalMenuTypeId={generalMenuTypeId}
       categories={categories}
       sectionsItems={sectionsItems}
       userItems={userItems}

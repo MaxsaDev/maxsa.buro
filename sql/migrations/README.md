@@ -118,6 +118,20 @@ psql -d your_database -f sql/migrations/009_general_menu_is_default_view.sql
 psql -d your_database -f sql/migrations/010_menu_is_default_for_all_offices.sql
 ```
 
+### Міграція 011: Клієнти без акаунту
+
+#### 011_clients_nullable_user_id.sql
+
+Дозволяє зберігати клієнтів, які не мають облікового запису в системі:
+
+- `mx_data.user_data.user_id` → nullable (`NULL` = клієнт без акаунту, створений вручну)
+- `mx_data.user_contact` → додає колонку `user_data_id uuid FK → mx_data.user_data(id)`; `user_id` стає nullable
+- Додає `CHECK (user_id IS NOT NULL OR user_data_id IS NOT NULL)` — гарантує, що контакт завжди прив'язаний до власника
+- Оновлює `UNIQUE INDEX user_contact_default_one_per_user_idx` для підтримки обох типів власників
+- Оновлює VIEW `user_data_with_contact_view` для коректного отримання контактів клієнтів без акаунту
+- Оновлює тригерні функції (`fn_check_user_data_has_contacts_aud`, `fn_user_contact_bu_maintain_default`, `fn_user_contact_aid_maintain_default`) для підтримки `user_data_id`
+- `mx_data.user_data_legal` → додає FK до `mx_data.user_data(id) ON DELETE CASCADE`
+
 ### Повна послідовність міграцій (якщо потрібно накатити з нуля по кроках)
 
 ```bash
@@ -131,5 +145,6 @@ psql -d your_database -f sql/migrations/007_nav_menu_add_office_id.sql
 psql -d your_database -f sql/migrations/008_general_menu.sql
 psql -d your_database -f sql/migrations/009_general_menu_is_default_view.sql
 psql -d your_database -f sql/migrations/010_menu_is_default_for_all_offices.sql
+psql -d your_database -f sql/migrations/011_clients_nullable_user_id.sql
 npm run dev
 ```

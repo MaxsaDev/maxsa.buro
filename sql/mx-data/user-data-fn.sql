@@ -16,26 +16,55 @@ LANGUAGE plpgsql
 AS $$
 /*
   ОПИС (UA):
-  Якщо існує профіль у mx_data.user_data для user_id, наприкінці транзакції має
-  існувати ≥1 контакт у mx_data.user_contact. Захищає від «висячих» профілів/контактів.
+  Якщо існує профіль у mx_data.user_data, наприкінці транзакції має
+  існувати ≥1 контакт у mx_data.user_contact.
+  Підтримує два режими:
+  - Зареєстрований користувач: контакти зберігаються з user_id
+  - Клієнт без акаунту: контакти зберігаються з user_data_id
 */
 DECLARE
-  v_user_id text;
-  v_cnt     integer;
+  v_user_id     text;
+  v_user_data_id uuid;
+  v_cnt         integer;
 BEGIN
-  v_user_id := COALESCE(NEW.user_id, OLD.user_id);
+  IF TG_TABLE_NAME = 'user_data' THEN
+    v_user_id     := COALESCE(NEW.user_id, OLD.user_id);
+    v_user_data_id := COALESCE(NEW.id, OLD.id);
 
-  -- Якщо профіль відсутній — немає чого перевіряти
-  IF NOT EXISTS (SELECT 1 FROM mx_data.user_data WHERE user_id = v_user_id) THEN
-    RETURN NULL;
+    -- Якщо профіль відсутній — немає чого перевіряти
+    IF NOT EXISTS (SELECT 1 FROM mx_data.user_data WHERE id = v_user_data_id) THEN
+      RETURN NULL;
+    END IF;
+
+  ELSIF TG_TABLE_NAME = 'user_contact' THEN
+    v_user_id     := COALESCE(NEW.user_id, OLD.user_id);
+    v_user_data_id := COALESCE(NEW.user_data_id, OLD.user_data_id);
+
+    -- Для зареєстрованого: знаходимо user_data за user_id
+    IF v_user_id IS NOT NULL THEN
+      IF NOT EXISTS (SELECT 1 FROM mx_data.user_data WHERE user_id = v_user_id) THEN
+        RETURN NULL;
+      END IF;
+      SELECT ud.id INTO v_user_data_id
+      FROM mx_data.user_data ud WHERE ud.user_id = v_user_id LIMIT 1;
+    END IF;
+
+    -- Для клієнта без акаунту: перевіряємо профіль за user_data_id
+    IF v_user_data_id IS NOT NULL THEN
+      IF NOT EXISTS (SELECT 1 FROM mx_data.user_data WHERE id = v_user_data_id) THEN
+        RETURN NULL;
+      END IF;
+    END IF;
   END IF;
 
+  -- Підрахунок контактів для профілю
   SELECT COUNT(*) INTO v_cnt
-  FROM mx_data.user_contact
-  WHERE user_id = v_user_id;
+  FROM mx_data.user_contact uc
+  WHERE (v_user_id IS NOT NULL AND uc.user_id = v_user_id)
+     OR (v_user_id IS NULL AND v_user_data_id IS NOT NULL AND uc.user_data_id = v_user_data_id);
 
   IF v_cnt < 1 THEN
-    RAISE EXCEPTION 'Порушення цілісності: профіль користувача (%) не має жодного контакту.', v_user_id
+    RAISE EXCEPTION 'Порушення цілісності: профіль (%) не має жодного контакту.', COALESCE(v_user_id, v_user_data_id::text)
       USING ERRCODE = '23514';
   END IF;
 
@@ -72,15 +101,6 @@ AS $$
 /*
   ОПИС (UA):
   Будує клікабельний URL для contact_value залежно від contact_type (code).
-  Правила:
-  - phone:    tel:+380... (нормалізуємо до E.164: лишаємо + та цифри; якщо + відсутній, додаємо)
-  - email:    mailto:user@example.com
-  - telegram: https://t.me/username  (якщо value починається з @ або вже https://t.me/, приводимо до username)
-  - viber:    viber://add?number=+380...  (E.164 з +)
-  - whatsapp: https://wa.me/380... (тільки цифри, без +)
-  - facebook: якщо value вже http(s) — повертаємо як є; інакше https://facebook.com/value
-  - instagram: аналогічно facebook
-  - messenger: якщо http(s) — як є; інакше https://m.me/value
 */
 DECLARE
   v text := trim(both from p_value::text);
@@ -92,10 +112,8 @@ BEGIN
   END IF;
 
   IF p_code = 'phone' THEN
-    -- лишаємо лише + та цифри
     v := regexp_replace(v, '[^0-9+]', '', 'g');
     IF v !~ '^\+' THEN
-      -- якщо немає '+', просто додамо (очікуємо, що бекенд уже перевірив валідність)
       v := '+' || regexp_replace(v, '[^0-9]', '', 'g');
     END IF;
     RETURN 'tel:' || v;
@@ -104,13 +122,11 @@ BEGIN
     RETURN 'mailto:' || lower(v);
 
   ELSIF p_code = 'telegram' THEN
-    -- зрізаємо протокол/хости до username
     v := regexp_replace(v, '^https?://(www\.)?t\.me/', '', 'i');
     v := regexp_replace(v, '^@', '');
     RETURN 'https://t.me/' || v;
 
   ELSIF p_code = 'viber' THEN
-    -- потребує E.164 із плюсом
     v := regexp_replace(v, '[^0-9+]', '', 'g');
     IF v !~ '^\+' THEN
       v := '+' || regexp_replace(v, '[^0-9]', '', 'g');
@@ -118,13 +134,12 @@ BEGIN
     RETURN 'viber://add?number=' || v;
 
   ELSIF p_code = 'whatsapp' THEN
-    -- wa.me приймає ТІЛЬКИ цифри
     v_digits := regexp_replace(v, '[^0-9]', '', 'g');
     RETURN 'https://wa.me/' || v_digits;
 
   ELSIF p_code = 'facebook' THEN
     IF v ~* '^https?://' THEN
-      RETURN v; -- вже повний URL
+      RETURN v;
     END IF;
     RETURN 'https://facebook.com/' || v;
 
@@ -132,9 +147,8 @@ BEGIN
     IF v ~* '^https?://' THEN
       RETURN v;
     END IF;
-    -- зрізаємо протокол/хости до username
     v := regexp_replace(v, '^https?://(www\.)?instagram\.com/', '', 'i');
-    v := regexp_replace(v, '^@', ''); -- видаляємо ведучий @
+    v := regexp_replace(v, '^@', '');
     RETURN 'https://instagram.com/' || v;
 
   ELSIF p_code = 'messenger' THEN
@@ -144,7 +158,6 @@ BEGIN
     RETURN 'https://m.me/' || v;
 
   ELSE
-    -- Фолбек: якщо у словнику є url_prefix — використаємо; інакше повертаємо як є
     RETURN COALESCE(
       (SELECT url_prefix FROM mx_dic.dic_contact_type WHERE code = p_code LIMIT 1),
       ''

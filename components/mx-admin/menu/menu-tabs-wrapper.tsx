@@ -49,10 +49,11 @@ const tabs: Array<{ id: TabId; label: string; description: string; icon: typeof 
 interface MenuTabsWrapperProps {
   menusSections: Menu[];
   menusItems: Menu[];
+  menusGeneral: Menu[];
   appSupportMenuId: number;
-  generalMenuId: number;
   sectionsMenuTypeId: number;
   itemsMenuTypeId: number;
+  generalMenuTypeId: number;
   categories: MenuUserSectionsCategory[];
   sectionsItems: MenuUserSectionsItems[];
   userItems: MenuUserItemsType[];
@@ -63,10 +64,11 @@ interface MenuTabsWrapperProps {
 export function MenuTabsWrapper({
   menusSections,
   menusItems,
+  menusGeneral,
   appSupportMenuId,
-  generalMenuId,
   sectionsMenuTypeId,
   itemsMenuTypeId,
+  generalMenuTypeId,
   categories,
   sectionsItems,
   userItems,
@@ -132,7 +134,9 @@ export function MenuTabsWrapper({
           <MenuUserItems menus={menusItems} menuTypeId={itemsMenuTypeId} items={userItems} />
         )}
 
-        {activeTab === 'general' && <MenuGeneral menuId={generalMenuId} items={generalItems} />}
+        {activeTab === 'general' && (
+          <MenuGeneral menus={menusGeneral} menuTypeId={generalMenuTypeId} items={generalItems} />
+        )}
 
         {activeTab === 'app-support' && (
           <MenuAppSupport menuId={appSupportMenuId} items={appSupport} />

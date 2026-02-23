@@ -1,11 +1,16 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { Star, Trash2 } from 'lucide-react';
-import { useTransition } from 'react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { GripVertical, Star, Trash2 } from 'lucide-react';
+import { useEffect, useState, useTransition } from 'react';
+import { toast } from 'sonner';
 
 import { createMenuGeneralItemAction } from '@/actions/mx-admin/menu/create-menu-items';
 import { deleteMenuGeneralItemAction } from '@/actions/mx-admin/menu/delete-menu-items';
+import { reorderMenusAction } from '@/actions/mx-admin/menu/menus';
+import { reorderMenuGeneralItems } from '@/actions/mx-admin/menu/reorder-menu-items';
 import { toggleMenuGeneralItemActiveAction } from '@/actions/mx-admin/menu/toggle-menu-active';
 import { toggleMenuGeneralItemDefaultAction } from '@/actions/mx-admin/menu/toggle-menu-default';
 import {
@@ -33,44 +38,222 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { showNotification } from '@/lib/notifications';
 import { cn } from '@/lib/utils';
 import { menuTitleSchema, menuUrlSchema } from '@/schemas/mx-admin/menu-schema';
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CreateMenuForm } from './create-menu-form';
 import { IconPicker } from './icon-picker';
+import { SortableMenuCard } from './sortable-menu-card';
+import { SortableMenuWrapper } from './sortable-menu-wrapper';
 
+import type { DragEndEvent } from '@dnd-kit/core';
 import type { MenuGeneralItems } from '@/interfaces/mx-dic/menu-general-items';
+import type { Menu } from '@/interfaces/mx-dic/menus';
 
 interface MenuGeneralProps {
+  menus: Menu[];
+  menuTypeId: number;
   items: MenuGeneralItems[];
-  menuId: number;
 }
 
-// Українська плюралізація для лічильника
-function pluralizeItems(count: number): string {
-  const lastTwo = count % 100;
-  const lastOne = count % 10;
-
-  if (lastTwo >= 11 && lastTwo <= 19) {
-    return `${count} пунктів`;
-  }
-  if (lastOne === 1) {
-    return `${count} пункт`;
-  }
-  if (lastOne >= 2 && lastOne <= 4) {
-    return `${count} пункти`;
-  }
-  return `${count} пунктів`;
+interface SortableMenuItemProps {
+  item: MenuGeneralItems;
+  onToggleActive?: (id: number, isActive: boolean) => void;
+  onToggleDefault?: (id: number, isDefault: boolean) => void;
+  onDelete?: (id: number) => void;
+  isPending?: boolean;
 }
 
-export function MenuGeneral({ items, menuId }: MenuGeneralProps) {
+function SortableMenuItem({
+  item,
+  onToggleActive,
+  onToggleDefault,
+  onDelete,
+  isPending,
+}: SortableMenuItemProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const isMobile = useIsMobile();
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="hover:bg-muted/30 flex items-center gap-2 rounded-lg border px-3 py-2.5"
+    >
+      {/* Drag handle */}
+      <div
+        {...attributes}
+        {...listeners}
+        suppressHydrationWarning
+        className="hover:bg-muted cursor-grab rounded-md p-1 transition-colors active:cursor-grabbing"
+        aria-label="Перетягнути пункт меню"
+      >
+        <GripVertical className="text-muted-foreground size-4" />
+      </div>
+
+      {/* Іконка */}
+      <IconPicker
+        id={item.id}
+        currentIcon={item.icon}
+        onSave={updateMenuGeneralItemIconAction}
+        disabled={isPending}
+      />
+
+      {/* Назва + URL */}
+      <div className={cn('flex-1', isMobile ? 'space-y-2' : 'flex flex-row gap-2')}>
+        <EditDbMaxsa
+          id={item.id}
+          value={item.title}
+          schema={menuTitleSchema}
+          onSave={updateMenuGeneralItemTitleAction}
+          placeholder="Назва пункту меню"
+          type="text"
+          className={isMobile ? 'w-full' : 'flex-1'}
+        />
+        <EditDbMaxsa
+          id={item.id}
+          value={item.url}
+          schema={menuUrlSchema}
+          onSave={updateMenuGeneralItemUrlAction}
+          placeholder="URL пункту меню"
+          type="url"
+          className={isMobile ? 'w-full' : 'flex-1'}
+        />
+      </div>
+
+      {/* Дії */}
+      <div className="flex items-center gap-1">
+        {/* Зірка — за замовчуванням (для всіх користувачів) */}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onToggleDefault?.(item.id, !item.is_default)}
+                disabled={isPending}
+                className="size-8"
+                aria-label={
+                  item.is_default ? 'Зняти за замовчуванням' : 'Встановити за замовчуванням'
+                }
+              >
+                <Star
+                  className={cn(
+                    'size-4',
+                    item.is_default ? 'fill-current text-amber-500' : 'text-muted-foreground/40'
+                  )}
+                />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {item.is_default ? 'За замовчуванням (для всіх)' : 'Встановити за замовчуванням'}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        {/* Switch активності */}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div>
+                <Switch
+                  checked={item.is_active}
+                  onCheckedChange={(checked) => onToggleActive?.(item.id, checked)}
+                  disabled={isPending}
+                  aria-label={`${item.is_active ? 'Деактивувати' : 'Активувати'} пункт меню`}
+                />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>Активність пункту меню</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        {/* Видалення */}
+        <TooltipProvider>
+          <Tooltip>
+            <AlertDialog>
+              <TooltipTrigger asChild>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={isPending}
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive size-8"
+                    aria-label="Видалити пункт меню"
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </AlertDialogTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Видалити пункт меню</TooltipContent>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Видалити пункт меню?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Ви впевнені що хочете видалити <strong>{item.title}</strong>?
+                    <br />
+                    Цю дію неможливо скасувати.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Скасувати</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => onDelete?.(item.id)}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Видалити
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+    </div>
+  );
+}
+
+export function MenuGeneral({ menus, menuTypeId, items }: MenuGeneralProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const isMobile = useIsMobile();
+  const [localMenus, setLocalMenus] = useState(menus);
+  const [isUpdatingMenus, setIsUpdatingMenus] = useState(false);
+
+  useEffect(() => {
+    setLocalMenus(menus);
+  }, [menus]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const handleToggleActive = (id: number, isActive: boolean) => {
     startTransition(async () => {
       const result = await toggleMenuGeneralItemActiveAction(id, isActive);
       showNotification(result);
-      if (result.status === 'success') {
-        router.refresh();
-      }
     });
   };
 
@@ -78,9 +261,6 @@ export function MenuGeneral({ items, menuId }: MenuGeneralProps) {
     startTransition(async () => {
       const result = await toggleMenuGeneralItemDefaultAction(id, isDefault);
       showNotification(result);
-      if (result.status === 'success') {
-        router.refresh();
-      }
     });
   };
 
@@ -88,184 +268,123 @@ export function MenuGeneral({ items, menuId }: MenuGeneralProps) {
     startTransition(async () => {
       const result = await deleteMenuGeneralItemAction(id);
       showNotification(result);
-      if (result.status === 'success') {
-        router.refresh();
-      }
     });
   };
 
-  if (menuId === 0) {
-    return (
-      <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-8">
-        <p className="text-muted-foreground text-sm">
-          Меню типу «Загальне» не знайдено в базі даних.
-        </p>
-        <p className="text-muted-foreground text-xs">
-          Виконайте міграцію 008 або додайте запис до таблиці{' '}
-          <code className="bg-muted rounded px-1">mx_dic.menus</code> вручну.
-        </p>
-      </div>
-    );
-  }
+  const handleReorder = async (reorderedItems: Array<{ id: number; sort_order: number }>) => {
+    await reorderMenuGeneralItems(reorderedItems);
+  };
+
+  const handleMenusDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id || isUpdatingMenus) {
+      return;
+    }
+
+    const oldIndex = localMenus.findIndex((menu) => menu.id === active.id);
+    const newIndex = localMenus.findIndex((menu) => menu.id === over.id);
+
+    if (oldIndex === -1 || newIndex === -1) {
+      return;
+    }
+
+    const newMenus = arrayMove(localMenus, oldIndex, newIndex);
+    const reindexedMenus = newMenus.map((menu, index) => ({
+      ...menu,
+      sort_order: (index + 1) * 100,
+    }));
+
+    setLocalMenus(reindexedMenus);
+
+    try {
+      setIsUpdatingMenus(true);
+      await reorderMenusAction(reindexedMenus);
+      toast.success('Порядок меню успішно оновлено');
+    } catch (error) {
+      setLocalMenus(menus);
+      toast.error('Помилка при оновленні порядку меню');
+      console.error('Reorder menus error:', error);
+    } finally {
+      setIsUpdatingMenus(false);
+    }
+  };
+
+  // Групуємо пункти по меню
+  const menusWithItems = localMenus.map((menu) => ({
+    menu,
+    items: items
+      .filter((item) => item.menu_id === menu.id)
+      .sort((a, b) => a.sort_order - b.sort_order),
+  }));
 
   return (
-    <div className="space-y-4">
-      {/* Заголовок з лічильником */}
-      <div>
-        <h3 className="text-lg font-semibold">Пункти загального меню</h3>
-        <p className="text-muted-foreground text-sm">{pluralizeItems(items.length)}</p>
-      </div>
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleMenusDragEnd}>
+      <SortableContext
+        items={localMenus.map((menu) => menu.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <div className="space-y-6">
+          {/* Кнопка створення нового меню */}
+          <div className="flex justify-end">
+            <CreateMenuForm
+              menuTypeId={menuTypeId}
+              onSuccess={() => {
+                router.refresh();
+              }}
+            />
+          </div>
 
-      {items.length > 0 && (
-        <div className="space-y-2">
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="hover:bg-muted/30 flex items-center gap-2 rounded-lg border px-3 py-2.5"
-            >
-              <IconPicker
-                id={item.id}
-                currentIcon={item.icon}
-                onSave={updateMenuGeneralItemIconAction}
-                disabled={isPending}
-              />
-              <div className={cn('flex-1', isMobile ? 'space-y-2' : 'flex flex-row gap-2')}>
-                <EditDbMaxsa
-                  id={item.id}
-                  value={item.title}
-                  schema={menuTitleSchema}
-                  onSave={updateMenuGeneralItemTitleAction}
-                  placeholder="Назва пункту меню"
-                  type="text"
-                  className={isMobile ? 'w-full' : 'flex-1'}
-                />
-                <EditDbMaxsa
-                  id={item.id}
-                  value={item.url}
-                  schema={menuUrlSchema}
-                  onSave={updateMenuGeneralItemUrlAction}
-                  placeholder="URL пункту меню"
-                  type="url"
-                  className={isMobile ? 'w-full' : 'flex-1'}
-                />
-              </div>
-              {/* Зірка — за замовчуванням (доступ для всіх) */}
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleToggleDefault(item.id, !item.is_default)}
-                      disabled={isPending}
-                      className="size-8"
-                      aria-label={
-                        item.is_default ? 'Зняти за замовчуванням' : 'Встановити за замовчуванням'
-                      }
-                    >
-                      <Star
-                        className={cn(
-                          'size-4',
-                          item.is_default
-                            ? 'fill-current text-amber-500'
-                            : 'text-muted-foreground/40'
-                        )}
+          {/* Список меню з пунктами */}
+          {menusWithItems.map(({ menu, items: menuItems }) => (
+            <SortableMenuCard key={menu.id} menu={menu} isPending={isPending || isUpdatingMenus}>
+              {menuItems.length > 0 ? (
+                <div className="space-y-2">
+                  <SortableMenuWrapper items={menuItems} onReorder={handleReorder}>
+                    {menuItems.map((item) => (
+                      <SortableMenuItem
+                        key={item.id}
+                        item={item}
+                        onToggleActive={handleToggleActive}
+                        onToggleDefault={handleToggleDefault}
+                        onDelete={handleDelete}
+                        isPending={isPending}
                       />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {item.is_default
-                      ? 'За замовчуванням (для всіх)'
-                      : 'Встановити за замовчуванням'}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <Switch
-                checked={item.is_active}
-                onCheckedChange={(checked) => handleToggleActive(item.id, checked)}
-                disabled={isPending}
-                aria-label={`${item.is_active ? 'Деактивувати' : 'Активувати'} пункт меню`}
-              />
-              <TooltipProvider>
-                <Tooltip>
-                  <AlertDialog>
-                    <TooltipTrigger asChild>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          disabled={isPending}
-                          className="text-destructive hover:bg-destructive/10 hover:text-destructive size-8"
-                          aria-label="Видалити пункт меню"
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                    </TooltipTrigger>
-                    <TooltipContent>Видалити пункт меню</TooltipContent>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Видалити пункт меню?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Ви впевнені що хочете видалити <strong>{item.title}</strong>?
-                          <br />
-                          Цю дію неможливо скасувати. Доступ до цього пункту буде втрачено для всіх
-                          користувачів, яким він призначений.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Скасувати</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleDelete(item.id)}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                          Видалити
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
+                    ))}
+                  </SortableMenuWrapper>
+
+                  {/* Форма додавання пункту */}
+                  <div className="mt-4 flex justify-start">
+                    <AddMenuItemForm
+                      triggerLabel="Додати пункт меню"
+                      onCreate={async (title, url, icon) =>
+                        createMenuGeneralItemAction(menu.id, title, url, icon)
+                      }
+                      titlePlaceholder="Назва пункту меню"
+                      urlPlaceholder="URL пункту меню"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-8">
+                  <p className="text-muted-foreground text-sm">
+                    Немає пунктів меню. Додайте перший пункт.
+                  </p>
+                  <AddMenuItemForm
+                    triggerLabel="Додати пункт меню"
+                    onCreate={async (title, url, icon) =>
+                      createMenuGeneralItemAction(menu.id, title, url, icon)
+                    }
+                    titlePlaceholder="Назва пункту меню"
+                    urlPlaceholder="URL пункту меню"
+                  />
+                </div>
+              )}
+            </SortableMenuCard>
           ))}
         </div>
-      )}
-
-      {items.length > 0 ? (
-        <div className="flex justify-start">
-          <AddMenuItemForm
-            triggerLabel="Додати пункт меню"
-            onCreate={async (title, url, icon) => {
-              const result = await createMenuGeneralItemAction(menuId, title, url, icon);
-              if (result.status === 'success') {
-                router.refresh();
-              }
-              return result;
-            }}
-            titlePlaceholder="Назва пункту меню"
-            urlPlaceholder="URL пункту меню"
-          />
-        </div>
-      ) : (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-8">
-          <p className="text-muted-foreground text-sm">
-            Немає пунктів загального меню. Додайте перший пункт.
-          </p>
-          <AddMenuItemForm
-            triggerLabel="Додати пункт меню"
-            onCreate={async (title, url, icon) => {
-              const result = await createMenuGeneralItemAction(menuId, title, url, icon);
-              if (result.status === 'success') {
-                router.refresh();
-              }
-              return result;
-            }}
-            titlePlaceholder="Назва пункту меню"
-            urlPlaceholder="URL пункту меню"
-          />
-        </div>
-      )}
-    </div>
+      </SortableContext>
+    </DndContext>
   );
 }
 

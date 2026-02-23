@@ -1,23 +1,36 @@
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
-import { Users } from 'lucide-react';
+import { Suspense } from 'react';
+import { redirect } from 'next/navigation';
 
-export default function Page() {
+import { getCurrentUser } from '@/lib/auth/auth-server';
+import { ClientsTableWrapper } from '@/components/mx-job/clients/clients-table-wrapper';
+
+function TableSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="bg-muted h-9 w-64 animate-pulse rounded-md" />
+        <div className="bg-muted h-9 w-28 animate-pulse rounded-md" />
+        <div className="bg-muted ml-auto h-9 w-32 animate-pulse rounded-md" />
+      </div>
+      <div className="bg-muted h-64 animate-pulse rounded-md" />
+    </div>
+  );
+}
+
+export default async function Page() {
+  const user = await getCurrentUser();
+  if (!user) redirect('/login');
+
   return (
     <div className="space-y-6">
-      {/* Заголовок */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Клієнти</h1>
-        <p className="text-muted-foreground mt-2">Список ваших клієнтів.</p>
+        <p className="text-muted-foreground mt-2">Список клієнтів офісу</p>
       </div>
 
-      <Empty>
-        <EmptyMedia>
-          <Users className="size-10" />
-        </EmptyMedia>
-        <EmptyHeader>
-          <EmptyTitle>Клієнтів в офісі ще немає</EmptyTitle>
-        </EmptyHeader>
-      </Empty>
+      <Suspense fallback={<TableSkeleton />}>
+        <ClientsTableWrapper />
+      </Suspense>
     </div>
   );
 }

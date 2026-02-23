@@ -10,13 +10,14 @@ CREATE SCHEMA IF NOT EXISTS mx_data;
 -- ТАБЛИЦЯ ПРОФІЛЮ КОРИСТУВАЧА
 -- ======================================================
 /*
-  1:1 до public."user" (Better Auth, id => text).
+  1:1 до public."user" (Better Auth, id => text) для зареєстрованих.
+  user_id = NULL означає клієнт без акаунту — створений співробітником вручну.
   Бізнес-вимога: профіль має мати ≥1 контакт у mx_data.user_contact.
 */
 DROP TABLE IF EXISTS mx_data.user_data CASCADE;
 CREATE TABLE IF NOT EXISTS mx_data.user_data (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id     text NOT NULL UNIQUE,     -- FK → public."user"(id)
+  user_id     text UNIQUE,              -- FK → public."user"(id); NULL = клієнт без акаунту
   full_name   text NOT NULL,
 
   created_at  timestamptz NOT NULL DEFAULT now(),
@@ -27,7 +28,7 @@ CREATE TABLE IF NOT EXISTS mx_data.user_data (
 );
 
 COMMENT ON TABLE mx_data.user_data IS
-'Профілі користувачів. Кожен профіль повинен мати щонайменше один контакт у mx_data.user_contact.';
+'Профілі користувачів та клієнтів. user_id=NULL означає клієнта без акаунту. Кожен профіль повинен мати щонайменше один контакт у mx_data.user_contact.';
 
 -- Представлення «профіль + актуальний контакт» (дефолтний або найсвіжіший)
 -- оновлений мінімалістичний VIEW: додаємо лише contact_url (дешевий обчислюваний текст)
@@ -52,7 +53,8 @@ FROM mx_data.user_data ud
     LEFT JOIN LATERAL (
       SELECT c.contact_value, c.contact_type_id
       FROM mx_data.user_contact c
-      WHERE c.user_id = ud.user_id
+      WHERE (ud.user_id IS NOT NULL AND c.user_id = ud.user_id)
+         OR (ud.user_id IS NULL AND c.user_data_id = ud.id)
       ORDER BY c.is_default DESC, c.updated_at DESC
       LIMIT 1
     ) uc ON TRUE

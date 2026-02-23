@@ -621,40 +621,10 @@ CREATE TABLE IF NOT EXISTS mx_system.user_offices
 -- MX_DATA: ПЕРСОНАЛЬНІ ДАНІ
 -- ============================================================
 
--- Контакти
-CREATE TABLE IF NOT EXISTS mx_data.user_contact (
-  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id         text NOT NULL,
-  contact_type_id smallint NOT NULL,
-  contact_value   citext  NOT NULL,
-  is_default      boolean NOT NULL DEFAULT false,
-
-  created_at      timestamptz NOT NULL DEFAULT now(),
-  updated_at      timestamptz NOT NULL DEFAULT now(),
-
-  CONSTRAINT user_contact_user_fk
-    FOREIGN KEY (user_id)         REFERENCES public."user"(id)           ON DELETE CASCADE,
-  CONSTRAINT user_contact_type_fk
-    FOREIGN KEY (contact_type_id) REFERENCES mx_dic.dic_contact_type(id) ON DELETE RESTRICT,
-
-  CONSTRAINT user_contact_unique_per_user UNIQUE (user_id, contact_type_id, contact_value)
-);
-
-COMMENT ON TABLE mx_data.user_contact IS
-'Контакти користувачів (словникові типи). Забезпечує множинні канали зв’язку; рівно один is_default=TRUE на user_id.';
-
-CREATE INDEX IF NOT EXISTS user_contact_user_idx ON mx_data.user_contact (user_id);
-CREATE INDEX IF NOT EXISTS user_contact_type_idx ON mx_data.user_contact (contact_type_id);
-
-DROP INDEX IF EXISTS mx_data.user_contact_default_one_per_user_idx;
-CREATE UNIQUE INDEX IF NOT EXISTS user_contact_default_one_per_user_idx
-  ON mx_data.user_contact (user_id)
-  WHERE is_default = TRUE;
-
--- Профілі
+-- Профілі (user_data перед user_contact через FK залежність)
 CREATE TABLE IF NOT EXISTS mx_data.user_data (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id     text NOT NULL UNIQUE,
+  user_id     text UNIQUE,              -- FK → public."user"(id); NULL = клієнт без акаунту
   full_name   text NOT NULL,
 
   created_at  timestamptz NOT NULL DEFAULT now(),
@@ -665,7 +635,75 @@ CREATE TABLE IF NOT EXISTS mx_data.user_data (
 );
 
 COMMENT ON TABLE mx_data.user_data IS
-'Профілі користувачів. Кожен профіль повинен мати щонайменше один контакт у mx_data.user_contact.';
+‘Профілі користувачів та клієнтів. user_id=NULL означає клієнта без акаунту. Кожен профіль повинен мати щонайменше один контакт у mx_data.user_contact.’;
+
+-- Контакти
+CREATE TABLE IF NOT EXISTS mx_data.user_contact (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         text,                                   -- FK → public."user"; NULL для клієнтів без акаунту
+  user_data_id    uuid,                                   -- FK → mx_data.user_data(id); NULL для зареєстрованих
+  contact_type_id smallint NOT NULL,
+  contact_value   citext  NOT NULL,
+  is_default      boolean NOT NULL DEFAULT false,
+
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT user_contact_user_fk
+    FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE,
+  CONSTRAINT user_contact_user_data_fk
+    FOREIGN KEY (user_data_id) REFERENCES mx_data.user_data(id) ON DELETE CASCADE,
+  CONSTRAINT user_contact_type_fk
+    FOREIGN KEY (contact_type_id) REFERENCES mx_dic.dic_contact_type(id) ON DELETE RESTRICT,
+
+  -- Обов’язково: або user_id, або user_data_id
+  CONSTRAINT user_contact_owner_check
+    CHECK (user_id IS NOT NULL OR user_data_id IS NOT NULL)
+);
+
+COMMENT ON TABLE mx_data.user_contact IS
+‘Контакти користувачів та клієнтів (словникові типи). user_id для зареєстрованих, user_data_id для клієнтів без акаунту. Рівно один is_default=TRUE на власника.’;
+
+CREATE INDEX IF NOT EXISTS user_contact_user_idx         ON mx_data.user_contact (user_id);
+CREATE INDEX IF NOT EXISTS user_contact_user_data_id_idx ON mx_data.user_contact (user_data_id);
+CREATE INDEX IF NOT EXISTS user_contact_type_idx         ON mx_data.user_contact (contact_type_id);
+
+DROP INDEX IF EXISTS mx_data.user_contact_default_one_per_user_idx;
+CREATE UNIQUE INDEX IF NOT EXISTS user_contact_default_one_per_user_idx
+  ON mx_data.user_contact (COALESCE(user_id, user_data_id::text))
+  WHERE is_default = TRUE;
+
+-- Юридичні дані клієнтів (опціональні, 1:1 до user_data)
+CREATE TABLE IF NOT EXISTS mx_data.user_data_legal (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_data_id    uuid NOT NULL,
+  data_address    VARCHAR(250) NULL,
+  data_address_legal VARCHAR(250) NULL,
+  phone           VARCHAR(20) NULL,
+  email           VARCHAR(50) NULL,
+  data_edrpou     VARCHAR(10) NOT NULL,
+  tin             VARCHAR(12) NULL,
+  data_account    VARCHAR(29) NULL,
+  data_bank       VARCHAR(50) NULL,
+  mfo_bank        VARCHAR(6) NULL,
+  post_director   VARCHAR(255) NULL,
+  data_director   VARCHAR(50) NULL,
+  phone_director  VARCHAR(20) NULL,
+  data_accountant VARCHAR(50) NULL,
+  phone_accountant VARCHAR(20) NULL,
+  data_contact    VARCHAR(50) NULL,
+  phone_contact   VARCHAR(20) NULL,
+  description     VARCHAR(250) NULL,
+
+  CONSTRAINT user_data_legal_unique_user_data UNIQUE (user_data_id),
+  CONSTRAINT user_data_legal_user_data_fk
+    FOREIGN KEY (user_data_id)
+    REFERENCES mx_data.user_data(id)
+    ON DELETE CASCADE
+);
+
+COMMENT ON TABLE mx_data.user_data_legal IS
+‘Юридичні дані клієнтів. 1:1 до mx_data.user_data. Обов’’язковий: ЄДРПОУ (data_edrpou).’;
 
 -- ============================================================
 -- ФУНКЦІЇ ТА ТРИГЕРИ: SORT_ORDER
@@ -1325,7 +1363,7 @@ BEFORE INSERT OR UPDATE ON mx_data.user_contact
 FOR EACH ROW
 EXECUTE FUNCTION mx_data.fn_user_contact_bi_validate();
 
--- Підтримка «рівно один дефолтний» контакт
+-- Підтримка «рівно один дефолтний» контакт (підтримує user_id і user_data_id)
 DROP FUNCTION IF EXISTS mx_data.fn_user_contact_bu_maintain_default() CASCADE;
 CREATE OR REPLACE FUNCTION mx_data.fn_user_contact_bu_maintain_default()
 RETURNS trigger
@@ -1333,9 +1371,15 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
   IF NEW.is_default AND (OLD.is_default IS DISTINCT FROM NEW.is_default) THEN
-    UPDATE mx_data.user_contact
-    SET is_default = FALSE
-    WHERE user_id = NEW.user_id AND id <> NEW.id AND is_default = TRUE;
+    IF NEW.user_id IS NOT NULL THEN
+      UPDATE mx_data.user_contact
+      SET is_default = FALSE
+      WHERE user_id = NEW.user_id AND id <> NEW.id AND is_default = TRUE;
+    ELSIF NEW.user_data_id IS NOT NULL THEN
+      UPDATE mx_data.user_contact
+      SET is_default = FALSE
+      WHERE user_data_id = NEW.user_data_id AND id <> NEW.id AND is_default = TRUE;
+    END IF;
   END IF;
 
   RETURN NEW;
@@ -1362,38 +1406,59 @@ BEGIN
   END IF;
 
   IF TG_OP = 'INSERT' THEN
-    IF NOT EXISTS (SELECT 1 FROM mx_data.user_contact WHERE user_id = NEW.user_id AND id <> NEW.id) THEN
-      IF NEW.is_default IS FALSE THEN
-        UPDATE mx_data.user_contact
-        SET is_default = TRUE
-        WHERE id = NEW.id;
+    IF NEW.user_id IS NOT NULL THEN
+      IF NOT EXISTS (SELECT 1 FROM mx_data.user_contact WHERE user_id = NEW.user_id AND id <> NEW.id) THEN
+        IF NEW.is_default IS FALSE THEN
+          UPDATE mx_data.user_contact SET is_default = TRUE WHERE id = NEW.id;
+        END IF;
       END IF;
-    END IF;
-
-    IF NEW.is_default THEN
-      UPDATE mx_data.user_contact
-      SET is_default = FALSE
-      WHERE user_id = NEW.user_id AND id <> NEW.id AND is_default IS TRUE;
+      IF NEW.is_default THEN
+        UPDATE mx_data.user_contact
+        SET is_default = FALSE
+        WHERE user_id = NEW.user_id AND id <> NEW.id AND is_default IS TRUE;
+      END IF;
+    ELSIF NEW.user_data_id IS NOT NULL THEN
+      IF NOT EXISTS (SELECT 1 FROM mx_data.user_contact WHERE user_data_id = NEW.user_data_id AND id <> NEW.id) THEN
+        IF NEW.is_default IS FALSE THEN
+          UPDATE mx_data.user_contact SET is_default = TRUE WHERE id = NEW.id;
+        END IF;
+      END IF;
+      IF NEW.is_default THEN
+        UPDATE mx_data.user_contact
+        SET is_default = FALSE
+        WHERE user_data_id = NEW.user_data_id AND id <> NEW.id AND is_default IS TRUE;
+      END IF;
     END IF;
 
     RETURN NEW;
 
   ELSIF TG_OP = 'DELETE' THEN
     IF OLD.is_default THEN
-      SELECT EXISTS (SELECT 1 FROM mx_data.user_contact WHERE user_id = OLD.user_id)
-      INTO v_has_others;
+      IF OLD.user_id IS NOT NULL THEN
+        SELECT EXISTS (SELECT 1 FROM mx_data.user_contact WHERE user_id = OLD.user_id)
+        INTO v_has_others;
 
-      IF v_has_others THEN
-        SELECT id
-        INTO v_new_id
-        FROM mx_data.user_contact
-        WHERE user_id = OLD.user_id
-        ORDER BY is_default DESC, updated_at DESC
-        LIMIT 1;
+        IF v_has_others THEN
+          SELECT id INTO v_new_id
+          FROM mx_data.user_contact
+          WHERE user_id = OLD.user_id
+          ORDER BY is_default DESC, updated_at DESC
+          LIMIT 1;
+          UPDATE mx_data.user_contact SET is_default = TRUE WHERE id = v_new_id;
+        END IF;
 
-        UPDATE mx_data.user_contact
-        SET is_default = TRUE
-        WHERE id = v_new_id;
+      ELSIF OLD.user_data_id IS NOT NULL THEN
+        SELECT EXISTS (SELECT 1 FROM mx_data.user_contact WHERE user_data_id = OLD.user_data_id)
+        INTO v_has_others;
+
+        IF v_has_others THEN
+          SELECT id INTO v_new_id
+          FROM mx_data.user_contact
+          WHERE user_data_id = OLD.user_data_id
+          ORDER BY is_default DESC, updated_at DESC
+          LIMIT 1;
+          UPDATE mx_data.user_contact SET is_default = TRUE WHERE id = v_new_id;
+        END IF;
       END IF;
     END IF;
 
@@ -1417,28 +1482,51 @@ BEFORE UPDATE ON mx_data.user_data
 FOR EACH ROW
 EXECUTE FUNCTION mx_global.set_updated_at();
 
--- Інтегриті: профіль має мати мінімум 1 контакт
+-- Інтегриті: профіль має мати мінімум 1 контакт (підтримує user_id і user_data_id)
 DROP FUNCTION IF EXISTS mx_data.fn_check_user_data_has_contacts_aud() CASCADE;
 CREATE OR REPLACE FUNCTION mx_data.fn_check_user_data_has_contacts_aud()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 DECLARE
-  v_user_id text;
-  v_cnt     integer;
+  v_user_id     text;
+  v_user_data_id uuid;
+  v_cnt         integer;
 BEGIN
-  v_user_id := COALESCE(NEW.user_id, OLD.user_id);
+  IF TG_TABLE_NAME = 'user_data' THEN
+    v_user_id     := COALESCE(NEW.user_id, OLD.user_id);
+    v_user_data_id := COALESCE(NEW.id, OLD.id);
 
-  IF NOT EXISTS (SELECT 1 FROM mx_data.user_data WHERE user_id = v_user_id) THEN
-    RETURN NULL;
+    IF NOT EXISTS (SELECT 1 FROM mx_data.user_data WHERE id = v_user_data_id) THEN
+      RETURN NULL;
+    END IF;
+
+  ELSIF TG_TABLE_NAME = 'user_contact' THEN
+    v_user_id     := COALESCE(NEW.user_id, OLD.user_id);
+    v_user_data_id := COALESCE(NEW.user_data_id, OLD.user_data_id);
+
+    IF v_user_id IS NOT NULL THEN
+      IF NOT EXISTS (SELECT 1 FROM mx_data.user_data WHERE user_id = v_user_id) THEN
+        RETURN NULL;
+      END IF;
+      SELECT ud.id INTO v_user_data_id
+      FROM mx_data.user_data ud WHERE ud.user_id = v_user_id LIMIT 1;
+    END IF;
+
+    IF v_user_data_id IS NOT NULL THEN
+      IF NOT EXISTS (SELECT 1 FROM mx_data.user_data WHERE id = v_user_data_id) THEN
+        RETURN NULL;
+      END IF;
+    END IF;
   END IF;
 
   SELECT COUNT(*) INTO v_cnt
-  FROM mx_data.user_contact
-  WHERE user_id = v_user_id;
+  FROM mx_data.user_contact uc
+  WHERE (v_user_id IS NOT NULL AND uc.user_id = v_user_id)
+     OR (v_user_id IS NULL AND v_user_data_id IS NOT NULL AND uc.user_data_id = v_user_data_id);
 
   IF v_cnt < 1 THEN
-    RAISE EXCEPTION 'Порушення цілісності: профіль користувача (%) не має жодного контакту.', v_user_id
+    RAISE EXCEPTION 'Порушення цілісності: профіль (%) не має жодного контакту.', COALESCE(v_user_id, v_user_data_id::text)
       USING ERRCODE = '23514';
   END IF;
 
@@ -1555,7 +1643,8 @@ FROM mx_data.user_data ud
     LEFT JOIN LATERAL (
       SELECT c.contact_value, c.contact_type_id
       FROM mx_data.user_contact c
-      WHERE c.user_id = ud.user_id
+      WHERE (ud.user_id IS NOT NULL AND c.user_id = ud.user_id)
+         OR (ud.user_id IS NULL AND c.user_data_id = ud.id)
       ORDER BY c.is_default DESC, c.updated_at DESC
       LIMIT 1
     ) uc ON TRUE
