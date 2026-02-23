@@ -119,13 +119,14 @@ ORDER BY
 
 -- =========================================================
 -- VIEW ДЛЯ САЙДБАРУ — фільтр за офісом за замовчуванням
--- Показує тільки дозволені й глобально активні пункти меню
--- для офісу, який є is_default у користувача
+-- Показує пункти меню для поточного дефолтного офісу:
+--   - явно призначені (nav_user_items) для цього офісу
+--   - АБО is_default = true — для всіх офісів користувача
 -- =========================================================
 DROP VIEW IF EXISTS mx_system.nav_user_items_user_view CASCADE;
 
 CREATE VIEW mx_system.nav_user_items_user_view AS
-SELECT
+SELECT DISTINCT ON (u.id, i.id)
     -- Користувач
     u.id                         AS user_id,
 
@@ -145,24 +146,33 @@ SELECT
     i.sort_order                 AS item_sort_order,
     i.is_active                  AS item_is_active_global
 FROM
-    mx_system.nav_user_items nui
-    JOIN public."user" u
-        ON u.id = nui.user_id
-    -- Фільтруємо тільки за дефолтним офісом користувача
+    public."user" u
+    -- Дефолтний офіс користувача
     JOIN mx_system.user_offices uo
-        ON uo.user_id = nui.user_id
-       AND uo.office_id = nui.office_id
+        ON uo.user_id = u.id
        AND uo.is_default = TRUE
-    JOIN mx_dic.menu_user_items i
-        ON i.id = nui.menu_id
+    -- Всі пункти меню
+    CROSS JOIN mx_dic.menu_user_items i
     JOIN mx_dic.menus m
         ON m.id = i.menu_id
 WHERE
     m.is_active = TRUE
     AND i.is_active = TRUE
+    AND (
+        -- Явно призначено для цього офісу
+        EXISTS (
+            SELECT 1 FROM mx_system.nav_user_items nui
+            WHERE nui.user_id = u.id
+              AND nui.menu_id = i.id
+              AND nui.office_id = uo.office_id
+        )
+        OR
+        -- Або позначено як загальнодоступне (для всіх офісів)
+        i.is_default = TRUE
+    )
 ORDER BY
     u.id,
+    i.id,
     m.sort_order,
     m.id,
-    i.sort_order,
-    i.id;
+    i.sort_order;

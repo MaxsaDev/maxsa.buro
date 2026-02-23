@@ -5,26 +5,37 @@ import {
   getMenuUserSectionsCategories,
   getMenuUserSectionsItems,
 } from '@/data/mx-dic/menu-admin';
+import { getAllMenuGeneralItems } from '@/data/mx-dic/menu-general';
 import { getMenusByType, getMenuTypes } from '@/data/mx-dic/menus';
 
 export default async function Page() {
-  const [menuTypes, menusSections, menusItems, categories, sectionsItems, userItems, appSupport] =
-    await Promise.all([
-      getMenuTypes(),
-      getMenusByType('sections'),
-      getMenusByType('items'),
-      getMenuUserSectionsCategories(),
-      getMenuUserSectionsItems(),
-      getMenuUserItems(),
-      getMenuAppSupport(),
-    ]);
+  const [
+    menuTypes,
+    menusSections,
+    menusItems,
+    menusGeneral,
+    categories,
+    sectionsItems,
+    userItems,
+    appSupport,
+    generalItems,
+  ] = await Promise.all([
+    getMenuTypes(),
+    getMenusByType('sections'),
+    getMenusByType('items'),
+    getMenusByType('general'),
+    getMenuUserSectionsCategories(),
+    getMenuUserSectionsItems(),
+    getMenuUserItems(),
+    getMenuAppSupport(),
+    getAllMenuGeneralItems(),
+  ]);
 
   // Знаходимо ID типів меню
   const sectionsMenuTypeId = menuTypes.find((type) => type.code === 'sections')?.id || 1;
   const itemsMenuTypeId = menuTypes.find((type) => type.code === 'items')?.id || 2;
 
-  // Знаходимо ID меню поддержки (единственное меню, к которому привязаны пункты поддержки)
-  // Меню поддержки - это меню типа "items" с названием "Меню підтримки додатку"
+  // Знаходимо ID меню поддержки
   const appSupportMenuId =
     appSupport.length > 0
       ? appSupport[0].menu_id
@@ -32,17 +43,23 @@ export default async function Page() {
         menusItems[0]?.id ||
         0;
 
+  // Знаходимо ID загального меню
+  const generalMenuId =
+    generalItems.length > 0 ? generalItems[0].menu_id : menusGeneral[0]?.id || 0;
+
   return (
     <MenuTabsWrapper
       menusSections={menusSections}
       menusItems={menusItems}
       appSupportMenuId={appSupportMenuId}
+      generalMenuId={generalMenuId}
       sectionsMenuTypeId={sectionsMenuTypeId}
       itemsMenuTypeId={itemsMenuTypeId}
       categories={categories}
       sectionsItems={sectionsItems}
       userItems={userItems}
       appSupport={appSupport}
+      generalItems={generalItems}
     />
   );
 }

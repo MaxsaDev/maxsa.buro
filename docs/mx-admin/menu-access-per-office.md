@@ -57,16 +57,29 @@ LEFT JOIN nav_user_sections nus ON nus.user_id=u.id AND nus.office_id=o.id AND n
 
 Повертає **всі можливі комбінації** user × office × item. Для кожної комбінації `item_is_assigned = (nus.id IS NOT NULL)`. Фільтрація за конкретним `user_id` і `office_id[]` відбувається в TypeScript-запиті, не у View.
 
-**User view** (`*_user_view`) — фільтр за поточним офісом:
+**User view** (`*_user_view`) — фільтр за поточним офісом з підтримкою `is_default`:
 
 ```sql
+FROM public."user" u
 JOIN mx_system.user_offices uo
-  ON uo.user_id = nus.user_id
- AND uo.office_id = nus.office_id
+  ON uo.user_id = u.id
  AND uo.is_default = TRUE
+CROSS JOIN mx_dic.menu_user_items i  -- або menu_user_sections_items
+JOIN mx_dic.menus m ON m.id = i.menu_id
+WHERE m.is_active = TRUE AND i.is_active = TRUE
+  AND (
+    -- явно призначено для поточного офісу
+    EXISTS (
+      SELECT 1 FROM mx_system.nav_user_items nui
+      WHERE nui.user_id = u.id AND nui.menu_id = i.id AND nui.office_id = uo.office_id
+    )
+    OR
+    -- або позначено як загальнодоступне — видно у всіх офісах
+    i.is_default = TRUE
+  )
 ```
 
-Повертає тільки пункти меню **поточного (default) офісу** користувача. Коли `OfficeSwitcher` змінює default → `revalidatePath('/(protected)', 'layout')` → layout ре-рендериться → `buildUserMenu` перечитує view → сайдбар оновлюється **автоматично без змін у layout**.
+Повертає пункти меню **поточного (default) офісу** користувача — і явно призначені для цього офісу, і пункти з `is_default = true` (вони видні у всіх офісах). Коли `OfficeSwitcher` змінює default → `revalidatePath('/(protected)', 'layout')` → layout ре-рендериться → `buildUserMenu` перечитує view → сайдбар оновлюється **автоматично без змін у layout**.
 
 ### 3.3 Bulk операції з ідемпотентністю
 
@@ -157,11 +170,11 @@ CREATE TABLE mx_system.nav_user_sections (
 CREATE INDEX idx_nav_user_sections_user_office ON nav_user_sections(user_id, office_id);
 ```
 
-**Views:** `nav_user_sections_admin_view` (CROSS JOIN матриця), `nav_user_sections_user_view` (JOIN is_default)
+**Views:** `nav_user_sections_admin_view` (CROSS JOIN матриця), `nav_user_sections_user_view` (CROSS JOIN + EXISTS OR is_default)
 
 #### `sql/mx_system/nav_user_items.sql`
 
-Ідентична структура для flat-items меню (без категорій). Таблиця `mx_system.nav_user_items` + `nav_user_items_admin_view` + `nav_user_items_user_view`.
+Ідентична структура для flat-items меню (без категорій). Таблиця `mx_system.nav_user_items` + `nav_user_items_admin_view` + `nav_user_items_user_view` (CROSS JOIN + EXISTS OR is_default).
 
 #### `sql/migrations/007_nav_menu_add_office_id.sql`
 

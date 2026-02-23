@@ -3,6 +3,11 @@
 import { revalidatePath } from 'next/cache';
 
 import {
+  updateMenuGeneralItemIcon,
+  updateMenuGeneralItemTitle,
+  updateMenuGeneralItemUrl,
+} from '@/data/mx-dic/menu-general';
+import {
   updateMenuAppSupportIcon,
   updateMenuAppSupportTitle,
   updateMenuAppSupportUrl,
@@ -991,5 +996,178 @@ export async function updateMenuAppSupportIconAction(
       message: 'Невідома помилка при оновленні іконки пункту меню',
       code: 'UNKNOWN_ERROR',
     };
+  }
+}
+
+/**
+ * Server Action для оновлення назви пункту загального меню
+ */
+export async function updateMenuGeneralItemTitleAction(
+  id: number | string,
+  title: string
+): Promise<ActionStatus> {
+  try {
+    const admin = await getCurrentUser();
+
+    if (!admin) {
+      return {
+        status: 'error',
+        message: 'Ви не авторизовані. Увійдіть в систему.',
+        code: 'UNAUTHORIZED',
+      };
+    }
+
+    if (admin.role !== 'admin') {
+      return {
+        status: 'error',
+        message: 'Доступ заборонено. Потрібні права адміністратора.',
+        code: 'FORBIDDEN',
+      };
+    }
+
+    const validation = menuTitleSchema.safeParse(title);
+
+    if (!validation.success) {
+      const errors = validation.error.flatten().formErrors;
+      return {
+        status: 'error',
+        message: errors[0] || 'Некоректна назва пункту меню',
+        code: 'VALIDATION_ERROR',
+      };
+    }
+
+    const menuId = typeof id === 'number' ? id : Number(id);
+    if (isNaN(menuId)) {
+      return { status: 'error', message: 'Некоректний ID пункту меню', code: 'VALIDATION_ERROR' };
+    }
+
+    await updateMenuGeneralItemTitle(menuId, validation.data);
+
+    console.log(`[updateMenuGeneralItemTitleAction] Назву пункту загального меню ${id} оновлено`);
+
+    revalidatePath('/mx-admin/menu-app');
+    revalidatePath('/(protected)', 'layout');
+
+    return { status: 'success', message: 'Назву пункту меню успішно оновлено' };
+  } catch (error) {
+    console.error('[updateMenuGeneralItemTitleAction] Помилка:', error);
+    if (error instanceof Error)
+      return { status: 'error', message: error.message, code: 'DB_ERROR' };
+    return { status: 'error', message: 'Невідома помилка', code: 'UNKNOWN_ERROR' };
+  }
+}
+
+/**
+ * Server Action для оновлення URL пункту загального меню
+ */
+export async function updateMenuGeneralItemUrlAction(
+  id: number | string,
+  url: string
+): Promise<ActionStatus> {
+  try {
+    const admin = await getCurrentUser();
+
+    if (!admin) {
+      return {
+        status: 'error',
+        message: 'Ви не авторизовані. Увійдіть в систему.',
+        code: 'UNAUTHORIZED',
+      };
+    }
+
+    if (admin.role !== 'admin') {
+      return {
+        status: 'error',
+        message: 'Доступ заборонено. Потрібні права адміністратора.',
+        code: 'FORBIDDEN',
+      };
+    }
+
+    const validation = menuUrlSchema.safeParse(url);
+
+    if (!validation.success) {
+      const errors = validation.error.flatten().formErrors;
+      return {
+        status: 'error',
+        message: errors[0] || 'Некоректний URL пункту меню',
+        code: 'VALIDATION_ERROR',
+      };
+    }
+
+    const menuId = typeof id === 'number' ? id : Number(id);
+    if (isNaN(menuId)) {
+      return { status: 'error', message: 'Некоректний ID пункту меню', code: 'VALIDATION_ERROR' };
+    }
+
+    await updateMenuGeneralItemUrl(menuId, validation.data);
+
+    console.log(`[updateMenuGeneralItemUrlAction] URL пункту загального меню ${id} оновлено`);
+
+    revalidatePath('/mx-admin/menu-app');
+    revalidatePath('/(protected)', 'layout');
+
+    return { status: 'success', message: 'URL пункту меню успішно оновлено' };
+  } catch (error) {
+    console.error('[updateMenuGeneralItemUrlAction] Помилка:', error);
+    if (error instanceof Error)
+      return { status: 'error', message: error.message, code: 'DB_ERROR' };
+    return { status: 'error', message: 'Невідома помилка', code: 'UNKNOWN_ERROR' };
+  }
+}
+
+/**
+ * Server Action для оновлення іконки пункту загального меню
+ */
+export async function updateMenuGeneralItemIconAction(
+  id: number | string,
+  icon: string
+): Promise<ActionStatus> {
+  try {
+    const admin = await getCurrentUser();
+
+    if (!admin) {
+      return {
+        status: 'error',
+        message: 'Ви не авторизовані. Увійдіть в систему.',
+        code: 'UNAUTHORIZED',
+      };
+    }
+
+    if (admin.role !== 'admin') {
+      return {
+        status: 'error',
+        message: 'Доступ заборонено. Потрібні права адміністратора.',
+        code: 'FORBIDDEN',
+      };
+    }
+
+    const validation = menuIconSchema.safeParse(icon);
+
+    if (!validation.success) {
+      const errors = validation.error.flatten().formErrors;
+      return {
+        status: 'error',
+        message: errors[0] || 'Некоректна назва іконки',
+        code: 'VALIDATION_ERROR',
+      };
+    }
+
+    const menuId = typeof id === 'number' ? id : Number(id);
+    if (isNaN(menuId)) {
+      return { status: 'error', message: 'Некоректний ID пункту меню', code: 'VALIDATION_ERROR' };
+    }
+
+    await updateMenuGeneralItemIcon(menuId, validation.data);
+
+    console.log(`[updateMenuGeneralItemIconAction] Іконку пункту загального меню ${id} оновлено`);
+
+    revalidatePath('/mx-admin/menu-app');
+
+    return { status: 'success', message: 'Іконку пункту меню успішно оновлено' };
+  } catch (error) {
+    console.error('[updateMenuGeneralItemIconAction] Помилка:', error);
+    if (error instanceof Error)
+      return { status: 'error', message: error.message, code: 'DB_ERROR' };
+    return { status: 'error', message: 'Невідома помилка', code: 'UNKNOWN_ERROR' };
   }
 }

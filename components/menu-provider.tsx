@@ -2,13 +2,14 @@
 
 import { useEffect, useLayoutEffect, useRef } from 'react';
 
-import type { MenuItem, MenuSection } from '@/lib/menu/types';
+import type { MenuGeneralItem, MenuItem, MenuSection } from '@/lib/menu/types';
 import { useUserMenuStore } from '@/store/user-menu/user-menu-store';
 
 interface MenuProviderProps {
   children: React.ReactNode;
   initialSections: MenuSection[];
   initialItems: MenuItem[];
+  initialGeneralItems: MenuGeneralItem[];
 }
 
 /**
@@ -70,24 +71,51 @@ function areItemsEqual(items1: MenuItem[], items2: MenuItem[]): boolean {
 }
 
 /**
+ * Порівнює два масиви пунктів загального меню на рівність
+ */
+function areGeneralItemsEqual(items1: MenuGeneralItem[], items2: MenuGeneralItem[]): boolean {
+  if (items1.length !== items2.length) return false;
+
+  return items1.every((item1, index) => {
+    const item2 = items2[index];
+    return (
+      item1.menuId === item2.menuId &&
+      item1.menuTitle === item2.menuTitle &&
+      item1.menuSortOrder === item2.menuSortOrder &&
+      item1.id === item2.id &&
+      item1.name === item2.name &&
+      item1.url === item2.url &&
+      item1.icon === item2.icon
+    );
+  });
+}
+
+/**
  * Provider для ініціалізації меню користувача в Zustand store
  * Ініціалізує store при монтуванні та оновлює при зміні даних з Server Component
  */
-export function MenuProvider({ children, initialSections, initialItems }: MenuProviderProps) {
+export function MenuProvider({
+  children,
+  initialSections,
+  initialItems,
+  initialGeneralItems,
+}: MenuProviderProps) {
   const setMenu = useUserMenuStore((state) => state.setMenu);
   const updateMenu = useUserMenuStore((state) => state.updateMenu);
   const isInitialized = useUserMenuStore((state) => state.isInitialized);
   const prevSectionsRef = useRef<MenuSection[]>([]);
   const prevItemsRef = useRef<MenuItem[]>([]);
+  const prevGeneralItemsRef = useRef<MenuGeneralItem[]>([]);
 
   // Використовуємо useLayoutEffect для синхронної ініціалізації перед рендером
   useLayoutEffect(() => {
     if (!isInitialized) {
-      setMenu(initialSections, initialItems);
+      setMenu(initialSections, initialItems, initialGeneralItems);
       prevSectionsRef.current = initialSections;
       prevItemsRef.current = initialItems;
+      prevGeneralItemsRef.current = initialGeneralItems;
     }
-  }, [isInitialized, initialSections, initialItems, setMenu]);
+  }, [isInitialized, initialSections, initialItems, initialGeneralItems, setMenu]);
 
   // Оновлюємо store при зміні даних через useEffect
   useEffect(() => {
@@ -95,13 +123,18 @@ export function MenuProvider({ children, initialSections, initialItems }: MenuPr
 
     const sectionsChanged = !areSectionsEqual(prevSectionsRef.current, initialSections);
     const itemsChanged = !areItemsEqual(prevItemsRef.current, initialItems);
+    const generalItemsChanged = !areGeneralItemsEqual(
+      prevGeneralItemsRef.current,
+      initialGeneralItems
+    );
 
-    if (sectionsChanged || itemsChanged) {
-      updateMenu(initialSections, initialItems);
+    if (sectionsChanged || itemsChanged || generalItemsChanged) {
+      updateMenu(initialSections, initialItems, initialGeneralItems);
       prevSectionsRef.current = initialSections;
       prevItemsRef.current = initialItems;
+      prevGeneralItemsRef.current = initialGeneralItems;
     }
-  }, [initialSections, initialItems, isInitialized, updateMenu]);
+  }, [initialSections, initialItems, initialGeneralItems, isInitialized, updateMenu]);
 
   return <>{children}</>;
 }

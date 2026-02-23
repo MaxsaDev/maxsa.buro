@@ -50,6 +50,7 @@ export function AppSidebar({ user, appSupportMenu, userOffices, ...props }: AppS
   // Завжди використовуємо меню з Zustand store (користувацьке меню з БД)
   const storeSections = useUserMenuStore((state) => state.sections);
   const storeItems = useUserMenuStore((state) => state.items);
+  const storeGeneralItems = useUserMenuStore((state) => state.generalItems);
 
   const appSupportWithIcons = appSupportMenu.map((item) => ({
     ...item,
@@ -179,6 +180,47 @@ export function AppSidebar({ user, appSupportMenu, userOffices, ...props }: AppS
             return sortedMenus.map(([menuId, { menuTitle, items }]) => (
               <NavItems
                 key={menuId}
+                items={items.map((item) => ({
+                  name: item.name,
+                  url: item.url,
+                  icon: getMenuIcon(item.icon) as LucideIcon,
+                }))}
+                label={menuTitle}
+              />
+            ));
+          })()}
+
+        {/* ============================================ */}
+        {/* ЗАГАЛЬНЕ МЕНЮ (завжди видно, незалежно від офісу) */}
+        {/* ============================================ */}
+        {!(isAdmin && isAdminRoute) &&
+          storeGeneralItems.length > 0 &&
+          (() => {
+            // Групуємо загальні пункти по меню
+            const generalByMenu = new Map<
+              number,
+              { menuTitle: string; menuSortOrder: number; items: typeof storeGeneralItems }
+            >();
+
+            for (const item of storeGeneralItems) {
+              if (!generalByMenu.has(item.menuId)) {
+                generalByMenu.set(item.menuId, {
+                  menuTitle: item.menuTitle,
+                  menuSortOrder: item.menuSortOrder,
+                  items: [],
+                });
+              }
+              generalByMenu.get(item.menuId)!.items.push(item);
+            }
+
+            // Сортуємо меню по sort_order
+            const sortedMenus = Array.from(generalByMenu.entries()).sort(
+              (a, b) => a[1].menuSortOrder - b[1].menuSortOrder
+            );
+
+            return sortedMenus.map(([menuId, { menuTitle, items }]) => (
+              <NavItems
+                key={`general-${menuId}`}
                 items={items.map((item) => ({
                   name: item.name,
                   url: item.url,

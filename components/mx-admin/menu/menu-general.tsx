@@ -1,16 +1,17 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { Trash2 } from 'lucide-react';
+import { Star, Trash2 } from 'lucide-react';
 import { useTransition } from 'react';
 
-import { createMenuAppSupportAction } from '@/actions/mx-admin/menu/create-menu-items';
-import { deleteMenuAppSupportAction } from '@/actions/mx-admin/menu/delete-menu-items';
-import { toggleMenuAppSupportActiveAction } from '@/actions/mx-admin/menu/toggle-menu-active';
+import { createMenuGeneralItemAction } from '@/actions/mx-admin/menu/create-menu-items';
+import { deleteMenuGeneralItemAction } from '@/actions/mx-admin/menu/delete-menu-items';
+import { toggleMenuGeneralItemActiveAction } from '@/actions/mx-admin/menu/toggle-menu-active';
+import { toggleMenuGeneralItemDefaultAction } from '@/actions/mx-admin/menu/toggle-menu-default';
 import {
-  updateMenuAppSupportIconAction,
-  updateMenuAppSupportTitleAction,
-  updateMenuAppSupportUrlAction,
+  updateMenuGeneralItemIconAction,
+  updateMenuGeneralItemTitleAction,
+  updateMenuGeneralItemUrlAction,
 } from '@/actions/mx-admin/menu/update-menu-fields';
 import { AddMenuItemForm } from '@/components/mx-admin/menu/add-menu-item-form';
 import { EditDbMaxsa } from '@/components/ui-maxsa/edit-db-maxsa';
@@ -34,10 +35,10 @@ import { cn } from '@/lib/utils';
 import { menuTitleSchema, menuUrlSchema } from '@/schemas/mx-admin/menu-schema';
 import { IconPicker } from './icon-picker';
 
-import type { MenuAppSupport as MenuAppSupportType } from '@/interfaces/mx-dic/menu-app-support';
+import type { MenuGeneralItems } from '@/interfaces/mx-dic/menu-general-items';
 
-interface MenuAppSupportProps {
-  items: MenuAppSupportType[];
+interface MenuGeneralProps {
+  items: MenuGeneralItems[];
   menuId: number;
 }
 
@@ -58,14 +59,24 @@ function pluralizeItems(count: number): string {
   return `${count} пунктів`;
 }
 
-export function MenuAppSupport({ items, menuId }: MenuAppSupportProps) {
+export function MenuGeneral({ items, menuId }: MenuGeneralProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const isMobile = useIsMobile();
 
   const handleToggleActive = (id: number, isActive: boolean) => {
     startTransition(async () => {
-      const result = await toggleMenuAppSupportActiveAction(id, isActive);
+      const result = await toggleMenuGeneralItemActiveAction(id, isActive);
+      showNotification(result);
+      if (result.status === 'success') {
+        router.refresh();
+      }
+    });
+  };
+
+  const handleToggleDefault = (id: number, isDefault: boolean) => {
+    startTransition(async () => {
+      const result = await toggleMenuGeneralItemDefaultAction(id, isDefault);
       showNotification(result);
       if (result.status === 'success') {
         router.refresh();
@@ -75,7 +86,7 @@ export function MenuAppSupport({ items, menuId }: MenuAppSupportProps) {
 
   const handleDelete = (id: number) => {
     startTransition(async () => {
-      const result = await deleteMenuAppSupportAction(id);
+      const result = await deleteMenuGeneralItemAction(id);
       showNotification(result);
       if (result.status === 'success') {
         router.refresh();
@@ -83,15 +94,29 @@ export function MenuAppSupport({ items, menuId }: MenuAppSupportProps) {
     });
   };
 
+  if (menuId === 0) {
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-8">
+        <p className="text-muted-foreground text-sm">
+          Меню типу «Загальне» не знайдено в базі даних.
+        </p>
+        <p className="text-muted-foreground text-xs">
+          Виконайте міграцію 008 або додайте запис до таблиці{' '}
+          <code className="bg-muted rounded px-1">mx_dic.menus</code> вручну.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Заголовок з лічильником */}
       <div>
-        <h3 className="text-lg font-semibold">Пункти підтримки</h3>
+        <h3 className="text-lg font-semibold">Пункти загального меню</h3>
         <p className="text-muted-foreground text-sm">{pluralizeItems(items.length)}</p>
       </div>
 
-      {items.length > 0 ? (
+      {items.length > 0 && (
         <div className="space-y-2">
           {items.map((item) => (
             <div
@@ -101,7 +126,7 @@ export function MenuAppSupport({ items, menuId }: MenuAppSupportProps) {
               <IconPicker
                 id={item.id}
                 currentIcon={item.icon}
-                onSave={updateMenuAppSupportIconAction}
+                onSave={updateMenuGeneralItemIconAction}
                 disabled={isPending}
               />
               <div className={cn('flex-1', isMobile ? 'space-y-2' : 'flex flex-row gap-2')}>
@@ -109,7 +134,7 @@ export function MenuAppSupport({ items, menuId }: MenuAppSupportProps) {
                   id={item.id}
                   value={item.title}
                   schema={menuTitleSchema}
-                  onSave={updateMenuAppSupportTitleAction}
+                  onSave={updateMenuGeneralItemTitleAction}
                   placeholder="Назва пункту меню"
                   type="text"
                   className={isMobile ? 'w-full' : 'flex-1'}
@@ -118,12 +143,43 @@ export function MenuAppSupport({ items, menuId }: MenuAppSupportProps) {
                   id={item.id}
                   value={item.url}
                   schema={menuUrlSchema}
-                  onSave={updateMenuAppSupportUrlAction}
+                  onSave={updateMenuGeneralItemUrlAction}
                   placeholder="URL пункту меню"
                   type="url"
                   className={isMobile ? 'w-full' : 'flex-1'}
                 />
               </div>
+              {/* Зірка — за замовчуванням (доступ для всіх) */}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleToggleDefault(item.id, !item.is_default)}
+                      disabled={isPending}
+                      className="size-8"
+                      aria-label={
+                        item.is_default ? 'Зняти за замовчуванням' : 'Встановити за замовчуванням'
+                      }
+                    >
+                      <Star
+                        className={cn(
+                          'size-4',
+                          item.is_default
+                            ? 'fill-current text-amber-500'
+                            : 'text-muted-foreground/40'
+                        )}
+                      />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {item.is_default
+                      ? 'За замовчуванням (для всіх)'
+                      : 'Встановити за замовчуванням'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               <Switch
                 checked={item.is_active}
                 onCheckedChange={(checked) => handleToggleActive(item.id, checked)}
@@ -153,7 +209,8 @@ export function MenuAppSupport({ items, menuId }: MenuAppSupportProps) {
                         <AlertDialogDescription>
                           Ви впевнені що хочете видалити <strong>{item.title}</strong>?
                           <br />
-                          Цю дію неможливо скасувати.
+                          Цю дію неможливо скасувати. Доступ до цього пункту буде втрачено для всіх
+                          користувачів, яким він призначений.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -172,15 +229,14 @@ export function MenuAppSupport({ items, menuId }: MenuAppSupportProps) {
             </div>
           ))}
         </div>
-      ) : (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-8">
-          <p className="text-muted-foreground text-sm">
-            Немає пунктів підтримки. Додайте перший пункт.
-          </p>
+      )}
+
+      {items.length > 0 ? (
+        <div className="flex justify-start">
           <AddMenuItemForm
             triggerLabel="Додати пункт меню"
             onCreate={async (title, url, icon) => {
-              const result = await createMenuAppSupportAction(menuId, title, url, icon);
+              const result = await createMenuGeneralItemAction(menuId, title, url, icon);
               if (result.status === 'success') {
                 router.refresh();
               }
@@ -190,14 +246,15 @@ export function MenuAppSupport({ items, menuId }: MenuAppSupportProps) {
             urlPlaceholder="URL пункту меню"
           />
         </div>
-      )}
-
-      {items.length > 0 && (
-        <div className="flex justify-start">
+      ) : (
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-8">
+          <p className="text-muted-foreground text-sm">
+            Немає пунктів загального меню. Додайте перший пункт.
+          </p>
           <AddMenuItemForm
             triggerLabel="Додати пункт меню"
             onCreate={async (title, url, icon) => {
-              const result = await createMenuAppSupportAction(menuId, title, url, icon);
+              const result = await createMenuGeneralItemAction(menuId, title, url, icon);
               if (result.status === 'success') {
                 router.refresh();
               }
@@ -211,3 +268,5 @@ export function MenuAppSupport({ items, menuId }: MenuAppSupportProps) {
     </div>
   );
 }
+
+MenuGeneral.displayName = 'MenuGeneral';

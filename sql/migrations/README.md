@@ -70,6 +70,16 @@
 - Оновлює user-в'юхи: `JOIN user_offices WHERE is_default = TRUE` для фільтрації за поточним офісом
 - Видаляє функції та тригери автопризначення (`fn_menu_user_*_au_assign_default`)
 
+#### 008_general_menu.sql
+
+Додає "загальне меню" — функціонал, що відображається в сайдбарі **завжди**, незалежно від вибраного офісу:
+
+- Додає новий тип меню `general` до `mx_dic.menu_types`
+- Створює `mx_dic.menu_general_items` — словник пунктів загального меню (аналог `menu_user_items`, але без прив'язки до офісу)
+- Створює `mx_system.nav_user_general` — призначення пунктів загального меню конкретним користувачам; `UNIQUE(user_id, menu_id)` без `office_id`
+- Створює `nav_user_general_admin_view` — 2D-матриця для адмін-панелі (user × menu_general_items)
+- Створює `nav_user_general_user_view` — відфільтровані пункти для сайдбару (без фільтрації за офісом)
+
 ## Порядок виконання для запуску проєкту
 
 ### Варіант А: Чиста база даних (новий проєкт)
@@ -94,6 +104,20 @@ npm run dev
 
 Після запуску у розділі `/mx-admin/user-data/[user_id]` → вкладка "Меню" буде доступний двопанельний інтерфейс: вибір офісів зліва, призначення пунктів меню справа.
 
+### Міграції 008–010: Загальне меню та is_default
+
+| Файл                                      | Опис                                                                                                                                                                         |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `008_general_menu.sql`                    | Нові таблиці `menu_general_items`, `nav_user_general`, view для загального меню (без прив'язки до офісу)                                                                     |
+| `009_general_menu_is_default_view.sql`    | Оновлення `nav_user_general_user_view`: пункти з `is_default = true` видно всім користувачам без явного призначення                                                          |
+| `010_menu_is_default_for_all_offices.sql` | Оновлення `nav_user_items_user_view` та `nav_user_sections_user_view`: пункти з `is_default = true` видно в усіх офісах користувача без явного призначення для кожного офісу |
+
+```bash
+psql -d your_database -f sql/migrations/008_general_menu.sql
+psql -d your_database -f sql/migrations/009_general_menu_is_default_view.sql
+psql -d your_database -f sql/migrations/010_menu_is_default_for_all_offices.sql
+```
+
 ### Повна послідовність міграцій (якщо потрібно накатити з нуля по кроках)
 
 ```bash
@@ -104,5 +128,8 @@ psql -d your_database -f sql/migrations/004_menu_system_add_is_default.sql
 psql -d your_database -f sql/migrations/005_menu_system_add_is_auto_assigned.sql
 psql -d your_database -f sql/migrations/006_user_offices_add_is_default.sql
 psql -d your_database -f sql/migrations/007_nav_menu_add_office_id.sql
+psql -d your_database -f sql/migrations/008_general_menu.sql
+psql -d your_database -f sql/migrations/009_general_menu_is_default_view.sql
+psql -d your_database -f sql/migrations/010_menu_is_default_for_all_offices.sql
 npm run dev
 ```

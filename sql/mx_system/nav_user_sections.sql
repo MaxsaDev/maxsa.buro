@@ -133,14 +133,15 @@ ORDER BY
 
 -- =====================================================================
 -- 3. VIEW ДЛЯ ВИВЕДЕННЯ МЕНЮ КОНКРЕТНОГО КОРИСТУВАЧА (САЙДБАР)
---    Показує тільки дозволені та глобально активні пункти
---    для офісу, який є is_default у користувача
+--    Показує пункти для поточного дефолтного офісу:
+--      - явно призначені (nav_user_sections) для цього офісу
+--      - АБО is_default = true — для всіх офісів користувача
 -- =====================================================================
 
 DROP VIEW IF EXISTS mx_system.nav_user_sections_user_view CASCADE;
 
 CREATE VIEW mx_system.nav_user_sections_user_view AS
-SELECT
+SELECT DISTINCT ON (u.id, i.id)
     -- Користувач
     u.id                                    AS user_id,
 
@@ -167,16 +168,13 @@ SELECT
     i.sort_order                            AS item_sort_order,
     i.is_active                             AS item_is_active_global
 FROM
-    mx_system.nav_user_sections nus
-    JOIN public."user" u
-        ON u.id = nus.user_id
-    -- Фільтруємо тільки за дефолтним офісом користувача
+    public."user" u
+    -- Дефолтний офіс користувача
     JOIN mx_system.user_offices uo
-        ON uo.user_id = nus.user_id
-       AND uo.office_id = nus.office_id
+        ON uo.user_id = u.id
        AND uo.is_default = TRUE
-    JOIN mx_dic.menu_user_sections_items i
-        ON i.id = nus.menu_id
+    -- Всі пункти меню з категоріями
+    CROSS JOIN mx_dic.menu_user_sections_items i
     JOIN mx_dic.menu_user_sections_category c
         ON c.id = i.category_id
     JOIN mx_dic.menus m
@@ -185,10 +183,22 @@ WHERE
     m.is_active = TRUE
     AND c.is_active = TRUE
     AND i.is_active = TRUE
+    AND (
+        -- Явно призначено для цього офісу
+        EXISTS (
+            SELECT 1 FROM mx_system.nav_user_sections nus
+            WHERE nus.user_id = u.id
+              AND nus.menu_id = i.id
+              AND nus.office_id = uo.office_id
+        )
+        OR
+        -- Або позначено як загальнодоступне (для всіх офісів)
+        i.is_default = TRUE
+    )
 ORDER BY
     u.id,
+    i.id,
     m.sort_order,
     m.id,
     c.id,
-    i.sort_order,
-    i.id;
+    i.sort_order;

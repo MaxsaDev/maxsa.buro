@@ -80,10 +80,15 @@ export default async function ProtectedLayout({ children }: { children: React.Re
     items: section.items ?? [],
   }));
   const navItems = userMenu.items;
+  const navGeneralItems = userMenu.generalItems;
 
   return (
     <UserProvider user={user}>
-      <MenuProvider initialSections={navSections} initialItems={navItems}>
+      <MenuProvider
+        initialSections={navSections}
+        initialItems={navItems}
+        initialGeneralItems={navGeneralItems}
+      >
         <PermissionsProvider initialPermissions={userPermissions}>
           <SidebarProvider>
             <AppSidebar user={user} appSupportMenu={activeAppSupport} userOffices={userOffices} />

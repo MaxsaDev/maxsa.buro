@@ -1,7 +1,8 @@
+import { getNavUserGeneralUserViewByUserId } from '@/data/mx-system/nav-user-general';
 import { getNavUserItemsUserViewByUserId } from '@/data/mx-system/nav-user-items';
 import { getNavUserSectionsUserViewByUserId } from '@/data/mx-system/nav-user-sections';
 
-import type { MenuItem, MenuSection } from './types';
+import type { MenuGeneralItem, MenuItem, MenuSection } from './types';
 
 /**
  * Побудувати меню користувача з секціями та пунктами
@@ -9,12 +10,14 @@ import type { MenuItem, MenuSection } from './types';
 export async function buildUserMenu(userId: string): Promise<{
   sections: MenuSection[];
   items: MenuItem[];
+  generalItems: MenuGeneralItem[];
 }> {
   try {
     // Отримуємо дані меню з БД
-    const [sectionsData, itemsData] = await Promise.all([
+    const [sectionsData, itemsData, generalData] = await Promise.all([
       getNavUserSectionsUserViewByUserId(userId),
       getNavUserItemsUserViewByUserId(userId),
+      getNavUserGeneralUserViewByUserId(userId),
     ]);
 
     // Групуємо секції по меню та категоріях
@@ -69,6 +72,19 @@ export async function buildUserMenu(userId: string): Promise<{
       };
     });
 
+    // Перетворюємо пункти загального меню (без прив'язки до офісу)
+    const generalItems: MenuGeneralItem[] = generalData.map((item) => {
+      return {
+        menuId: item.menu_id,
+        menuTitle: item.menu_title,
+        menuSortOrder: item.menu_sort_order,
+        id: item.item_id,
+        name: item.item_title,
+        url: item.item_url,
+        icon: item.item_icon, // Рядкове ім'я іконки
+      };
+    });
+
     // Перетворюємо в плоский масив секцій, зберігаючи порядок меню
     const sections: MenuSection[] = [];
     const sortedMenuIds = Array.from(menusMap.keys()).sort((a, b) => {
@@ -86,6 +102,7 @@ export async function buildUserMenu(userId: string): Promise<{
     return {
       sections,
       items,
+      generalItems,
     };
   } catch (error) {
     console.error('[buildUserMenu] Помилка побудови меню користувача:', error);
@@ -93,6 +110,7 @@ export async function buildUserMenu(userId: string): Promise<{
     return {
       sections: [],
       items: [],
+      generalItems: [],
     };
   }
 }

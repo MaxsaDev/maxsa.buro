@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
+import { deleteMenuGeneralItem } from '@/data/mx-dic/menu-general';
 import {
   deleteMenuAppSupport,
   deleteMenuUserItem,
@@ -237,6 +238,67 @@ export async function deleteMenuAppSupportAction(id: number): Promise<ActionStat
     };
   } catch (error) {
     console.error('[deleteMenuAppSupportAction] Помилка видалення пункту меню:', error);
+
+    if (error instanceof Error) {
+      return {
+        status: 'error',
+        message: error.message,
+        code: 'DB_ERROR',
+      };
+    }
+
+    return {
+      status: 'error',
+      message: 'Невідома помилка при видаленні пункту меню',
+      code: 'UNKNOWN_ERROR',
+    };
+  }
+}
+
+/**
+ * Server Action для видалення пункту загального меню
+ */
+export async function deleteMenuGeneralItemAction(id: number): Promise<ActionStatus> {
+  try {
+    const admin = await getCurrentUser();
+
+    if (!admin) {
+      return {
+        status: 'error',
+        message: 'Ви не авторизовані. Увійдіть в систему.',
+        code: 'UNAUTHORIZED',
+      };
+    }
+
+    if (admin.role !== 'admin') {
+      return {
+        status: 'error',
+        message: 'Доступ заборонено. Потрібні права адміністратора.',
+        code: 'FORBIDDEN',
+      };
+    }
+
+    if (!id || id <= 0) {
+      return {
+        status: 'error',
+        message: 'Некоректний ID пункту меню',
+        code: 'VALIDATION_ERROR',
+      };
+    }
+
+    await deleteMenuGeneralItem(id);
+
+    console.log(`[deleteMenuGeneralItemAction] Пункт загального меню ${id} видалено`);
+
+    revalidatePath('/mx-admin/menu-app');
+    revalidatePath('/(protected)', 'layout');
+
+    return {
+      status: 'success',
+      message: 'Пункт меню успішно видалено',
+    };
+  } catch (error) {
+    console.error('[deleteMenuGeneralItemAction] Помилка видалення пункту загального меню:', error);
 
     if (error instanceof Error) {
       return {

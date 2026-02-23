@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
+import { toggleMenuGeneralItemActive } from '@/data/mx-dic/menu-general';
 import {
   updateMenuAppSupportActive,
   updateMenuUserItemsActive,
@@ -256,6 +257,64 @@ export async function toggleMenuAppSupportActiveAction(
     return {
       status: 'error',
       message: 'Невідома помилка при переключенні активності пункту меню підтримки',
+      code: 'UNKNOWN_ERROR',
+    };
+  }
+}
+
+/**
+ * Server Action для переключення активності пункту загального меню
+ */
+export async function toggleMenuGeneralItemActiveAction(
+  id: number,
+  isActive: boolean
+): Promise<ActionStatus> {
+  try {
+    const admin = await getCurrentUser();
+
+    if (!admin) {
+      return {
+        status: 'error',
+        message: 'Ви не авторизовані. Увійдіть в систему.',
+        code: 'UNAUTHORIZED',
+      };
+    }
+
+    if (admin.role !== 'admin') {
+      return {
+        status: 'error',
+        message: 'Доступ заборонено. Потрібні права адміністратора.',
+        code: 'FORBIDDEN',
+      };
+    }
+
+    await toggleMenuGeneralItemActive(id, isActive);
+
+    console.log(
+      `[toggleMenuGeneralItemActiveAction] Пункт загального меню ${id} ${isActive ? 'активовано' : 'деактивовано'}`
+    );
+
+    revalidatePath('/mx-admin/menu-app');
+    revalidatePath('/(protected)', 'layout');
+
+    return {
+      status: 'success',
+      message: `Пункт меню ${isActive ? 'активовано' : 'деактивовано'}`,
+    };
+  } catch (error) {
+    console.error('[toggleMenuGeneralItemActiveAction] Помилка переключення активності:', error);
+
+    if (error instanceof Error) {
+      return {
+        status: 'error',
+        message: error.message,
+        code: 'DB_ERROR',
+      };
+    }
+
+    return {
+      status: 'error',
+      message: 'Невідома помилка при переключенні активності пункту загального меню',
       code: 'UNKNOWN_ERROR',
     };
   }

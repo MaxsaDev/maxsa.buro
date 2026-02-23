@@ -1,35 +1,40 @@
 import { create } from 'zustand';
 
-import type { MenuItem, MenuSection } from '@/lib/menu/types';
+import type { MenuGeneralItem, MenuItem, MenuSection } from '@/lib/menu/types';
 
 interface UserMenuState {
   sections: MenuSection[];
   items: MenuItem[];
+  generalItems: MenuGeneralItem[];
   isInitialized: boolean;
-  setMenu: (sections: MenuSection[], items: MenuItem[]) => void;
-  updateMenu: (sections: MenuSection[], items: MenuItem[]) => void;
+  setMenu: (sections: MenuSection[], items: MenuItem[], generalItems: MenuGeneralItem[]) => void;
+  updateMenu: (sections: MenuSection[], items: MenuItem[], generalItems: MenuGeneralItem[]) => void;
   clearMenu: () => void;
 }
 
 export const useUserMenuStore = create<UserMenuState>((set) => ({
   sections: [],
   items: [],
+  generalItems: [],
   isInitialized: false,
-  setMenu: (sections, items) =>
+  setMenu: (sections, items, generalItems) =>
     set({
       sections,
       items,
+      generalItems,
       isInitialized: true,
     }),
-  updateMenu: (sections, items) =>
+  updateMenu: (sections, items, generalItems) =>
     set({
       sections,
       items,
+      generalItems,
     }),
   clearMenu: () =>
     set({
       sections: [],
       items: [],
+      generalItems: [],
       isInitialized: false,
     }),
 }));
