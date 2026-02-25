@@ -1,4 +1,4 @@
-CREATE SCHEMA IF NOT EXISTS mx_dic;
+DROP SCHEMA IF EXISTS mx_dic CASCADE;
 
 DROP TABLE IF EXISTS mx_dic.dic_posts_assignee CASCADE;
 CREATE TABLE mx_dic.dic_posts_assignee
@@ -10,5 +10,6 @@ CREATE TABLE mx_dic.dic_posts_assignee
 INSERT INTO mx_dic.dic_posts_assignee (title)
 VALUES ('Кандидат'),
        ('Перекладач'),
-       ('Нотаріус')
+       ('Нотаріус'),
+       ('Курʼєр')
 ;
