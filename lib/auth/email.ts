@@ -99,7 +99,7 @@ const BASE_STYLES = `
   /* ── Логотип між хедером і контентом ── */
   .email-logo-block {
     background-color: #ffffff;
-    padding: 32px 48px 16px;
+    padding: 32px 48px 8px;
     text-align: center;
   }
 
