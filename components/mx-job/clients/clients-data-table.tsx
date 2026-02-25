@@ -11,22 +11,23 @@
  */
 
 import {
-  ColumnDef,
   FilterFn,
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
+  RowSelectionState,
   SortingState,
   useReactTable,
   VisibilityState,
 } from '@tanstack/react-table';
 import { rankItem } from '@tanstack/match-sorter-utils';
-import { BriefcaseBusiness, Plus, User, Users } from 'lucide-react';
+import { BriefcaseBusiness, Plus, User, UserCheck, Users } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { AssignAssigneeDialog } from '@/components/mx-job/assignee/assign-assignee-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -42,9 +43,13 @@ import { DataTablePagination } from '@/components/tables/data-table-pagination';
 import type { ClientView } from '@/interfaces/mx-data/client-view';
 import type { ClientFilter } from '@/data/mx-data/clients';
 
+import { getClientsColumns } from './clients-columns';
+
 interface Props {
-  columns: ColumnDef<ClientView>[];
   data: ClientView[];
+  hasAssignPermission: boolean;
+  defaultOfficeId: number | null;
+  defaultOfficeTitle: string | null;
 }
 
 /**
@@ -57,30 +62,40 @@ const fuzzyFilter: FilterFn<ClientView> = (row, columnId, value, addMeta) => {
 };
 
 /**
- * Таблиця клієнтів з пошуком, фільтрацією та пагінацією
+ * Таблиця клієнтів з пошуком, фільтрацією та пагінацією.
+ * Якщо hasAssignPermission=true — з'являється checkbox-колонка та кнопка призначення виконавців.
  *
  * Next.js 16 + React Compiler:
  * Цей компонент не мемоізується автоматично через обмеження TanStack Table.
  */
-export function ClientsDataTable({ columns, data }: Props) {
+export function ClientsDataTable({
+  data,
+  hasAssignPermission,
+  defaultOfficeId,
+  defaultOfficeTitle,
+}: Props) {
   const router = useRouter();
+  const columns = getClientsColumns(hasAssignPermission);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState('');
   const [legalFilter, setLegalFilter] = useState<ClientFilter>('all');
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
 
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
-    // Видимі колонки
+  const baseVisibility: VisibilityState = {
     full_name: true,
     contact_value: true,
     has_legal: true,
     actions: true,
-
-    // Приховані колонки (для пошуку або внутрішньої логіки)
     user_name: false,
     user_data_id: false,
     contact_type_code: false,
     created_at: false,
-  });
+  };
+
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
+    hasAssignPermission ? { ...baseVisibility, select: true } : baseVisibility
+  );
 
   // Фільтрація за типом клієнта (фізична / юридична особа)
   const filteredData = data.filter((client) => {
@@ -101,10 +116,14 @@ export function ClientsDataTable({ columns, data }: Props) {
     onGlobalFilterChange: setGlobalFilter,
     globalFilterFn: fuzzyFilter,
     onColumnVisibilityChange: setColumnVisibility,
+    onRowSelectionChange: setRowSelection,
+    // Виконавці (is_assignee=true) не можна вибрати
+    enableRowSelection: (row) => !row.original.is_assignee,
     state: {
       sorting,
       globalFilter,
       columnVisibility,
+      rowSelection,
     },
     initialState: {
       pagination: {
@@ -114,9 +133,21 @@ export function ClientsDataTable({ columns, data }: Props) {
     },
   });
 
+  // Вибрані клієнти (не виконавці)
+  const selectedClients = table.getSelectedRowModel().rows.map((row) => row.original);
+
+  const handleAssignSuccess = (assigneeIds: string[]) => {
+    // Скидаємо вибір після успішного призначення
+    setRowSelection({});
+    // Відкриваємо вкладки для кожного призначеного виконавця
+    assigneeIds.forEach((id) => {
+      window.open(`/mx-job/assignee/${id}`, '_blank');
+    });
+  };
+
   return (
     <div className="w-full space-y-4">
-      {/* Верхня панель: пошук + фільтр + кнопка */}
+      {/* Верхня панель: пошук + фільтр + кнопки */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-1 items-center gap-3">
           <Input
@@ -149,6 +180,17 @@ export function ClientsDataTable({ columns, data }: Props) {
           <div className="text-muted-foreground text-sm">
             {table.getFilteredRowModel().rows.length} з {filteredData.length}
           </div>
+          {hasAssignPermission && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={selectedClients.length === 0}
+              onClick={() => setAssignDialogOpen(true)}
+            >
+              <UserCheck className="size-4" />
+              Призначити виконавцями
+            </Button>
+          )}
           <Button size="sm" onClick={() => router.push('/mx-job/clients/new')}>
             <Plus className="size-4" />
             Новий клієнт
@@ -178,6 +220,7 @@ export function ClientsDataTable({ columns, data }: Props) {
                 <TableRow
                   key={row.id}
                   className="cursor-pointer"
+                  data-state={row.getIsSelected() ? 'selected' : undefined}
                   onClick={() => router.push(`/mx-job/clients/${row.original.user_data_id}`)}
                 >
                   {row.getVisibleCells().map((cell) => (
@@ -199,6 +242,18 @@ export function ClientsDataTable({ columns, data }: Props) {
       </div>
 
       <DataTablePagination table={table} />
+
+      {/* Діалог призначення виконавців */}
+      {hasAssignPermission && (
+        <AssignAssigneeDialog
+          open={assignDialogOpen}
+          onOpenChange={setAssignDialogOpen}
+          selectedClients={selectedClients}
+          defaultOfficeId={defaultOfficeId}
+          defaultOfficeTitle={defaultOfficeTitle}
+          onSuccess={handleAssignSuccess}
+        />
+      )}
     </div>
   );
 }

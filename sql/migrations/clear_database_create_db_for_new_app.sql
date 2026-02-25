@@ -4,6 +4,28 @@
 -- ============================================================
 
 -- ============================================================
+-- ОЧИСТКА: видалити все перед відтворенням з нуля
+-- ============================================================
+
+-- Кастомні схеми (CASCADE видаляє всі таблиці, функції, тригери, views)
+DROP SCHEMA IF EXISTS mx_data    CASCADE;
+DROP SCHEMA IF EXISTS mx_system  CASCADE;
+DROP SCHEMA IF EXISTS mx_dic     CASCADE;
+DROP SCHEMA IF EXISTS mx_global  CASCADE;
+
+-- Better Auth таблиці (public схема)
+DROP VIEW  IF EXISTS public.user_view CASCADE;
+DROP TABLE IF EXISTS passkey        CASCADE;
+DROP TABLE IF EXISTS "twoFactor"    CASCADE;
+DROP TABLE IF EXISTS verification   CASCADE;
+DROP TABLE IF EXISTS account        CASCADE;
+DROP TABLE IF EXISTS session        CASCADE;
+DROP TABLE IF EXISTS "user"         CASCADE;
+
+-- Глобальні функції public схеми
+DROP FUNCTION IF EXISTS public.set_updated_at() CASCADE;
+
+-- ============================================================
 -- РОЗШИРЕННЯ
 -- ============================================================
 CREATE EXTENSION IF NOT EXISTS citext;        -- case-insensitive текст
@@ -194,7 +216,7 @@ CREATE TABLE IF NOT EXISTS mx_dic.dic_contact_type (
 );
 
 COMMENT ON TABLE mx_dic.dic_contact_type IS
-'Словник каналів зв’язку з метаданими (назва, іконка, URL-префікс, активність).';
+'Словник каналів звʼязку з метаданими (назва, іконка, URL-префікс, активність).';
 
 INSERT INTO mx_dic.dic_contact_type (code, title, title_en, url_prefix, sort_order) VALUES
  ('phone',     'Телефон',              'Phone',     'tel:',                   10),
@@ -394,7 +416,7 @@ CREATE TABLE IF NOT EXISTS mx_dic.user_permissions_category
 );
 
 INSERT INTO mx_dic.user_permissions_category (title, description, icon, is_active) VALUES
- ('Документація', 'Створення документації застосунку', 'CircleCheck', true)
+ ('Призначення', 'Призначення на ролі та посади', 'CircleCheck', true)
 ON CONFLICT DO NOTHING;
 
 -- Пункти повноважень
@@ -414,9 +436,8 @@ CREATE TABLE IF NOT EXISTS mx_dic.user_permissions_items
 );
 
 INSERT INTO mx_dic.user_permissions_items (category_id, title, description, sort_order, is_active) VALUES
- (1, 'Створення категорій документації', 'Дозволяє створювати категорії документації', 100, true),
- (1, 'Створення розділів документації', 'Дозволяє створювати розділи документації', 200, true),
- (1, 'Створення статей документації', 'Дозволяє створювати статті документації', 300, true)
+ (1, 'Призначення працівників', 'Дозволяє призначати працівників до офісу', 100, true),
+ (1, 'Призначення виконавців', 'Дозволяє призначати виконавців', 200, true)
 ON CONFLICT DO NOTHING;
 
 -- Офіси / філії компанії
@@ -443,6 +464,18 @@ COMMENT ON TABLE mx_dic.offices IS
 CREATE INDEX IF NOT EXISTS idx_offices_sort_order ON mx_dic.offices(sort_order);
 CREATE INDEX IF NOT EXISTS idx_offices_is_active ON mx_dic.offices(is_active);
 CREATE INDEX IF NOT EXISTS idx_offices_city ON mx_dic.offices(city);
+
+-- Посади виконавців
+CREATE TABLE IF NOT EXISTS mx_dic.dic_posts_assignee
+(
+    id    SMALLSERIAL PRIMARY KEY,
+    title VARCHAR(20) NOT NULL
+);
+
+INSERT INTO mx_dic.dic_posts_assignee (title)
+SELECT v.title
+FROM (VALUES ('Кандидат'), ('Перекладач'), ('Нотаріус'), ('Курʼєр')) AS v(title)
+WHERE NOT EXISTS (SELECT 1 FROM mx_dic.dic_posts_assignee);
 
 -- ============================================================
 -- MX_SYSTEM: ПРИЗНАЧЕННЯ МЕНЮ, ПОВНОВАЖЕНЬ ТА ОФІСІВ
@@ -635,7 +668,7 @@ CREATE TABLE IF NOT EXISTS mx_data.user_data (
 );
 
 COMMENT ON TABLE mx_data.user_data IS
-‘Профілі користувачів та клієнтів. user_id=NULL означає клієнта без акаунту. Кожен профіль повинен мати щонайменше один контакт у mx_data.user_contact.’;
+'Профілі користувачів та клієнтів. user_id=NULL означає клієнта без акаунту. Кожен профіль повинен мати щонайменше один контакт у mx_data.user_contact.';
 
 -- Контакти
 CREATE TABLE IF NOT EXISTS mx_data.user_contact (
@@ -656,13 +689,13 @@ CREATE TABLE IF NOT EXISTS mx_data.user_contact (
   CONSTRAINT user_contact_type_fk
     FOREIGN KEY (contact_type_id) REFERENCES mx_dic.dic_contact_type(id) ON DELETE RESTRICT,
 
-  -- Обов’язково: або user_id, або user_data_id
+  -- Обов'язково: або user_id, або user_data_id
   CONSTRAINT user_contact_owner_check
     CHECK (user_id IS NOT NULL OR user_data_id IS NOT NULL)
 );
 
 COMMENT ON TABLE mx_data.user_contact IS
-‘Контакти користувачів та клієнтів (словникові типи). user_id для зареєстрованих, user_data_id для клієнтів без акаунту. Рівно один is_default=TRUE на власника.’;
+'Контакти користувачів та клієнтів (словникові типи). user_id для зареєстрованих, user_data_id для клієнтів без акаунту. Рівно один is_default=TRUE на власника.';
 
 CREATE INDEX IF NOT EXISTS user_contact_user_idx         ON mx_data.user_contact (user_id);
 CREATE INDEX IF NOT EXISTS user_contact_user_data_id_idx ON mx_data.user_contact (user_data_id);
@@ -703,16 +736,74 @@ CREATE TABLE IF NOT EXISTS mx_data.user_data_legal (
 );
 
 COMMENT ON TABLE mx_data.user_data_legal IS
-‘Юридичні дані клієнтів. 1:1 до mx_data.user_data. Обов’’язковий: ЄДРПОУ (data_edrpou).’;
+'Юридичні дані клієнтів. 1:1 до mx_data.user_data. Обовʼязковий: ЄДРПОУ (data_edrpou).';
+
+-- ============================================================
+-- mx_data.assignee_data — виконавці послуг
+-- ============================================================
+CREATE TABLE IF NOT EXISTS mx_data.assignee_data
+(
+    id               uuid         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_data_id     uuid         NOT NULL,
+    user_id          text         NULL,
+    post_assignee_id INTEGER      NOT NULL,
+    description      TEXT         NULL,
+    updated_by       text         NULL,
+    created_at       timestamptz  NOT NULL DEFAULT now(),
+    updated_at       timestamptz  NOT NULL DEFAULT now(),
+
+    CONSTRAINT assignee_data_fk_user_data
+        FOREIGN KEY (user_data_id) REFERENCES mx_data.user_data (id) ON DELETE CASCADE,
+    CONSTRAINT assignee_data_fk_user
+        FOREIGN KEY (user_id) REFERENCES public."user" (id) ON DELETE SET NULL,
+    CONSTRAINT assignee_data_fk_updated_by
+        FOREIGN KEY (updated_by) REFERENCES public."user" (id) ON DELETE SET NULL,
+    CONSTRAINT assignee_data_fk_post_assignee
+        FOREIGN KEY (post_assignee_id) REFERENCES mx_dic.dic_posts_assignee (id) ON DELETE RESTRICT,
+    CONSTRAINT assignee_data_unique_user_data_id
+        UNIQUE (user_data_id)
+);
+
+CREATE INDEX IF NOT EXISTS assignee_data_user_data_id_idx ON mx_data.assignee_data (user_data_id);
+CREATE INDEX IF NOT EXISTS assignee_data_user_id_idx      ON mx_data.assignee_data (user_id);
+CREATE INDEX IF NOT EXISTS assignee_data_post_idx         ON mx_data.assignee_data (post_assignee_id);
+
+COMMENT ON TABLE mx_data.assignee_data IS
+'Виконавці послуг. Кожен запис відповідає одній особі (user_data). Звʼязок з офісами — через mx_data.assignee_offices.';
+
+-- ============================================================
+-- mx_data.assignee_offices — зв'язок виконавець↔офіс (M:M)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS mx_data.assignee_offices
+(
+    id               uuid        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    assignee_data_id uuid        NOT NULL,
+    office_id        int         NOT NULL,
+    is_default       boolean     NOT NULL DEFAULT FALSE,
+    created_at       timestamptz NOT NULL DEFAULT now(),
+
+    CONSTRAINT assignee_offices_fk_assignee
+        FOREIGN KEY (assignee_data_id) REFERENCES mx_data.assignee_data (id) ON DELETE CASCADE,
+    CONSTRAINT assignee_offices_fk_office
+        FOREIGN KEY (office_id) REFERENCES mx_dic.offices (id) ON DELETE CASCADE,
+    CONSTRAINT assignee_offices_unique
+        UNIQUE (assignee_data_id, office_id)
+);
+
+CREATE INDEX IF NOT EXISTS assignee_offices_assignee_idx ON mx_data.assignee_offices (assignee_data_id);
+CREATE INDEX IF NOT EXISTS assignee_offices_office_idx   ON mx_data.assignee_offices (office_id);
+
+COMMENT ON TABLE mx_data.assignee_offices IS
+'Привʼязка виконавців до офісів. Відсутність записів = виконавець для всіх офісів. Наявність записів = лише для вказаних офісів. is_default = офіс за замовчуванням.';
 
 -- ============================================================
 -- ФУНКЦІЇ ТА ТРИГЕРИ: SORT_ORDER
 -- ============================================================
 
 -- menus sort_order
-DROP FUNCTION IF EXISTS mx_dic.fn_menus_bi_sort_order();
-DROP FUNCTION IF EXISTS mx_dic.fn_menus_bu_sort_order_reorder();
-DROP FUNCTION IF EXISTS mx_dic.fn_menus_ad_sort_order_reorder();
+DROP FUNCTION IF EXISTS mx_dic.fn_menus_bi_sort_order() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_menus_bu_sort_order_reorder() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_menus_ad_sort_order_reorder() CASCADE;
 
 CREATE OR REPLACE FUNCTION mx_dic.fn_menus_bi_sort_order()
 RETURNS TRIGGER AS $$
@@ -793,9 +884,9 @@ CREATE TRIGGER trg_menus_ad_sort_order_reorder
   EXECUTE FUNCTION mx_dic.fn_menus_ad_sort_order_reorder();
 
 -- menu_user_sections_items sort_order
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_items_bi_sort_order();
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_items_bu_sort_order_reorder();
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_items_ad_sort_order_reorder();
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_items_bi_sort_order() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_items_bu_sort_order_reorder() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_items_ad_sort_order_reorder() CASCADE;
 
 CREATE OR REPLACE FUNCTION mx_dic.fn_menu_user_sections_items_bi_sort_order()
 RETURNS TRIGGER AS $$
@@ -884,9 +975,9 @@ CREATE TRIGGER trg_menu_user_sections_items_ad_sort_order_reorder
   EXECUTE FUNCTION mx_dic.fn_menu_user_sections_items_ad_sort_order_reorder();
 
 -- menu_user_items sort_order
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_items_ai_sort_order();
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_items_au_sort_order_reorder();
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_items_ad_sort_order_reorder();
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_items_ai_sort_order() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_items_au_sort_order_reorder() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_items_ad_sort_order_reorder() CASCADE;
 
 CREATE OR REPLACE FUNCTION mx_dic.fn_menu_user_items_ai_sort_order()
 RETURNS TRIGGER AS $$
@@ -967,9 +1058,9 @@ CREATE TRIGGER trg_menu_user_items_ad_sort_order_reorder
   EXECUTE FUNCTION mx_dic.fn_menu_user_items_ad_sort_order_reorder();
 
 -- user_permissions_items sort_order
-DROP FUNCTION IF EXISTS mx_dic.fn_user_permissions_items_bi_sort_order();
-DROP FUNCTION IF EXISTS mx_dic.fn_user_permissions_items_bu_sort_order_reorder();
-DROP FUNCTION IF EXISTS mx_dic.fn_user_permissions_items_ad_sort_order_reorder();
+DROP FUNCTION IF EXISTS mx_dic.fn_user_permissions_items_bi_sort_order() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_user_permissions_items_bu_sort_order_reorder() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_user_permissions_items_ad_sort_order_reorder() CASCADE;
 
 CREATE OR REPLACE FUNCTION mx_dic.fn_user_permissions_items_bi_sort_order()
 RETURNS TRIGGER AS $$
@@ -1058,9 +1149,9 @@ CREATE TRIGGER trg_user_permissions_items_ad_sort_order_reorder
   EXECUTE FUNCTION mx_dic.fn_user_permissions_items_ad_sort_order_reorder();
 
 -- offices sort_order
-DROP FUNCTION IF EXISTS mx_dic.fn_offices_bi_sort_order();
-DROP FUNCTION IF EXISTS mx_dic.fn_offices_bu_sort_order_reorder();
-DROP FUNCTION IF EXISTS mx_dic.fn_offices_ad_sort_order_reorder();
+DROP FUNCTION IF EXISTS mx_dic.fn_offices_bi_sort_order() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_offices_bu_sort_order_reorder() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_offices_ad_sort_order_reorder() CASCADE;
 
 CREATE OR REPLACE FUNCTION mx_dic.fn_offices_bi_sort_order()
 RETURNS TRIGGER AS $$
@@ -1150,8 +1241,8 @@ CREATE TRIGGER trg_offices_bu_set_updated_at
 -- ФУНКЦІЇ ТА ТРИГЕРИ: IS_DEFAULT ДЛЯ USER_OFFICES
 -- ============================================================
 
-DROP FUNCTION IF EXISTS mx_system.fn_user_offices_biu_is_default();
-DROP FUNCTION IF EXISTS mx_system.fn_user_offices_ad_is_default();
+DROP FUNCTION IF EXISTS mx_system.fn_user_offices_biu_is_default() CASCADE;
+DROP FUNCTION IF EXISTS mx_system.fn_user_offices_ad_is_default() CASCADE;
 
 CREATE OR REPLACE FUNCTION mx_system.fn_user_offices_biu_is_default()
     RETURNS TRIGGER AS $$
@@ -1211,7 +1302,7 @@ EXECUTE FUNCTION mx_system.fn_user_offices_ad_is_default();
 -- ============================================================
 
 -- menu_user_sections_category → menu_user_sections_items
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_category_au_sync_items_active();
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_category_au_sync_items_active() CASCADE;
 CREATE OR REPLACE FUNCTION mx_dic.fn_menu_user_sections_category_au_sync_items_active()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -1234,7 +1325,7 @@ CREATE TRIGGER trg_menu_user_sections_category_au_sync_items_active
   EXECUTE FUNCTION mx_dic.fn_menu_user_sections_category_au_sync_items_active();
 
 -- user_permissions_category → user_permissions_items
-DROP FUNCTION IF EXISTS mx_dic.fn_user_permissions_category_au_sync_items_active();
+DROP FUNCTION IF EXISTS mx_dic.fn_user_permissions_category_au_sync_items_active() CASCADE;
 CREATE OR REPLACE FUNCTION mx_dic.fn_user_permissions_category_au_sync_items_active()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -1268,8 +1359,8 @@ DROP TRIGGER IF EXISTS trg_menu_user_sections_items_au_assign_default
 DROP TRIGGER IF EXISTS trg_menu_user_items_au_assign_default
   ON mx_dic.menu_user_items;
 
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_items_au_assign_default();
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_items_au_assign_default();
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_items_au_assign_default() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_items_au_assign_default() CASCADE;
 
 -- ============================================================
 -- MX_DATA: ФУНКЦІЇ ТА ТРИГЕРИ
@@ -1549,7 +1640,7 @@ FOR EACH ROW
 EXECUTE FUNCTION mx_data.fn_check_user_data_has_contacts_aud();
 
 -- Утиліта побудови URL контакту
-DROP FUNCTION IF EXISTS mx_data.fn_contact_build_url(text, citext);
+DROP FUNCTION IF EXISTS mx_data.fn_contact_build_url(text, citext) CASCADE;
 CREATE OR REPLACE FUNCTION mx_data.fn_contact_build_url(p_code text, p_value citext)
 RETURNS text
 LANGUAGE plpgsql
@@ -2075,3 +2166,42 @@ ORDER BY
   u.id,
   o.sort_order,
   o.id;
+
+-- mx_data.assignee_data_view
+CREATE OR REPLACE VIEW mx_data.assignee_data_view AS
+SELECT
+    ad.id                                                                   AS assignee_id,
+    ad.user_data_id,
+    ad.user_id,
+    ud.full_name,
+    ad.post_assignee_id,
+    dp.title                                                                AS post_assignee_title,
+    ad.description,
+    ad.updated_by,
+    ad.created_at,
+    ad.updated_at,
+    uc.contact_value,
+    dct.code                                                                AS contact_type_code,
+    uc.contact_type_id,
+    mx_data.fn_contact_build_url(dct.code, uc.contact_value)               AS contact_url,
+    u.name                                                                  AS user_name,
+    u.image                                                                 AS user_image,
+    u."isBanned"                                                            AS is_banned
+FROM mx_data.assignee_data ad
+    JOIN mx_data.user_data ud
+        ON ud.id = ad.user_data_id
+    JOIN mx_dic.dic_posts_assignee dp
+        ON dp.id = ad.post_assignee_id
+    LEFT JOIN LATERAL (
+        SELECT c.contact_value, c.contact_type_id
+        FROM mx_data.user_contact c
+        WHERE (ad.user_id IS NOT NULL AND c.user_id = ad.user_id)
+           OR (ad.user_id IS NULL AND c.user_data_id = ad.user_data_id)
+        ORDER BY c.is_default DESC, c.updated_at DESC
+        LIMIT 1
+    ) uc ON TRUE
+    LEFT JOIN mx_dic.dic_contact_type dct
+        ON dct.id = uc.contact_type_id
+    LEFT JOIN public."user" u
+        ON u.id = ad.user_id
+;

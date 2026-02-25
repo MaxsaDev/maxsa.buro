@@ -132,6 +132,21 @@ psql -d your_database -f sql/migrations/010_menu_is_default_for_all_offices.sql
 - Оновлює тригерні функції (`fn_check_user_data_has_contacts_aud`, `fn_user_contact_bu_maintain_default`, `fn_user_contact_aid_maintain_default`) для підтримки `user_data_id`
 - `mx_data.user_data_legal` → додає FK до `mx_data.user_data(id) ON DELETE CASCADE`
 
+### Міграція 012: Виконавці — виправлення assignee_data + офіси
+
+#### 012_assignee_data_fix_and_offices.sql
+
+Виправляє помилки в `mx_data.assignee_data` та додає зв'язок виконавців з офісами:
+
+- Додає колонку `updated_by uuid NULL` (FK → `public."user"`) — хто останній оновив запис
+- Видаляє хибний FK `assignee_data_fk_updated_user` (посилався на неіснуючу колонку `updated_user_id`)
+- Додає FK `user_data_id → mx_data.user_data(id)` (каскадне видалення)
+- Переносить UNIQUE з `user_id` на `user_data_id` (одна особа = один виконавець)
+- Створює нову таблицю `mx_data.assignee_offices` (M:M зв'язок виконавець↔офіс):
+  - Відсутність записів = виконавець доступний для **всіх** офісів
+  - Наявність записів = лише для **вказаних** офісів; `is_default` = офіс за замовчуванням
+- Оновлює VIEW `mx_data.assignee_data_view`: додає контакт (LATERAL JOIN), `updated_by`, дані акаунту
+
 ### Повна послідовність міграцій (якщо потрібно накатити з нуля по кроках)
 
 ```bash
@@ -146,5 +161,6 @@ psql -d your_database -f sql/migrations/008_general_menu.sql
 psql -d your_database -f sql/migrations/009_general_menu_is_default_view.sql
 psql -d your_database -f sql/migrations/010_menu_is_default_for_all_offices.sql
 psql -d your_database -f sql/migrations/011_clients_nullable_user_id.sql
+psql -d your_database -f sql/migrations/012_assignee_data_fix_and_offices.sql
 npm run dev
 ```

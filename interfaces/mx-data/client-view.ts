@@ -11,6 +11,7 @@ export interface ClientView {
   contact_type_id: number | null;
   contact_url: string | null;
   has_legal: boolean;
+  is_assignee: boolean;
 }
 
 export interface ClientLegal {

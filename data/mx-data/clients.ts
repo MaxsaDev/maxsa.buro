@@ -75,7 +75,10 @@ export async function getClients(filter: ClientFilter = 'all'): Promise<ClientVi
         mx_data.fn_contact_build_url(dct.code, uc.contact_value) AS contact_url,
         EXISTS (
           SELECT 1 FROM mx_data.user_data_legal l WHERE l.user_data_id = ud.id
-        ) AS has_legal
+        ) AS has_legal,
+        EXISTS (
+          SELECT 1 FROM mx_data.assignee_data ad WHERE ad.user_data_id = ud.id
+        ) AS is_assignee
       FROM mx_data.user_data ud
       LEFT JOIN LATERAL (
         SELECT c.contact_value, c.contact_type_id
@@ -451,7 +454,10 @@ export async function getClientById(userDataId: string): Promise<ClientView | nu
         mx_data.fn_contact_build_url(dct.code, uc.contact_value) AS contact_url,
         EXISTS (
           SELECT 1 FROM mx_data.user_data_legal l WHERE l.user_data_id = ud.id
-        ) AS has_legal
+        ) AS has_legal,
+        EXISTS (
+          SELECT 1 FROM mx_data.assignee_data ad WHERE ad.user_data_id = ud.id
+        ) AS is_assignee
       FROM mx_data.user_data ud
       LEFT JOIN LATERAL (
         SELECT c.contact_value, c.contact_type_id
