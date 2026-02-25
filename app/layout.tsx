@@ -49,7 +49,7 @@ export const metadata: Metadata = {
     default: 'Maxsa Buro',
   },
 
-  description: 'Maxsa Buro — система керування бізнесом.',
+  description: 'Maxsa Buro — система керування бізнесом перекладів.',
 
   applicationName: 'Maxsa Buro',
 
@@ -73,7 +73,7 @@ export const metadata: Metadata = {
     locale: 'uk_UA',
     url: siteUrl,
     title: 'Maxsa Buro',
-    description: 'Maxsa Buro — система керування бізнесом.',
+    description: 'Maxsa Buro — система керування бізнесом перекладів.',
     // images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Maxsa Buro' }],
   },
 

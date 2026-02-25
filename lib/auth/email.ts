@@ -39,10 +39,11 @@ export const sendEmail = async ({ to, subject, html }: SendEmailOptions) => {
 
 // ─── Спільні стилі та компоненти ────────────────────────────────────────────
 
-const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="40" height="40" style="display:block;">
-  <circle cx="500" cy="500" r="500" fill="#231f20"/>
-  <path d="M425.3,811.85c-180.9-27.9-250.2-162.9-250.2-297,0-160.2,109.8-326.7,324.9-326.7s324.9,159.3,324.9,324.9c0,130.5-73.8,270-238.5,294.3v-155.7c54-21.6,88.2-74.7,88.2-144s-37.8-126-102.6-146.7v209.7h-135.9v-210.6c-70.2,20.7-110.7,73.8-110.7,147.6,0,67.5,33.3,125.1,99.9,146.7v157.5Z" fill="#fff"/>
-</svg>`;
+// Публічний URL логотипу — email-клієнти блокують data: URI, тому використовуємо абсолютний URL
+const getLogoImg = () => {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://maxsa.com.ua';
+  return `<img src="${baseUrl}/favicon/favicon-96x96.png" width="64" height="64" alt="Maxsa Buro" style="display:block;" />`;
+};
 
 const BASE_STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&display=swap');
@@ -69,13 +70,10 @@ const BASE_STYLES = `
     border: 1px solid #e0ddd6;
   }
 
-  /* ── Хедер ── */
+  /* ── Хедер (wordmark без логотипу) ── */
   .email-header {
     background-color: #1a1a1a;
-    padding: 32px 48px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
+    padding: 22px 48px;
   }
 
   .email-header-wordmark {
@@ -95,7 +93,13 @@ const BASE_STYLES = `
     font-weight: 400;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    margin-top: 4px;
+    margin-top: 5px;
+  }
+
+  /* ── Логотип між хедером і контентом ── */
+  .email-logo-block {
+    background-color: #ffffff;
+    padding: 32px 48px 24px;
   }
 
   /* ── Золота розділова лінія ── */
@@ -269,17 +273,19 @@ const buildEmailHtml = (subject: string, content: string): string => `<!DOCTYPE 
   <div class="email-wrapper">
     <div class="email-card">
 
-      <!-- Хедер -->
+      <!-- Хедер (wordmark) -->
       <div class="email-header">
-        ${LOGO_SVG}
-        <div>
-          <div class="email-header-wordmark">Maxsa Buro</div>
-          <div class="email-header-sub">Система керування бізнесом</div>
-        </div>
+        <div class="email-header-wordmark">Maxsa Buro</div>
+        <div class="email-header-sub">Система керування бізнесом перекладів</div>
       </div>
 
       <!-- Золота лінія -->
       <div class="gold-rule"></div>
+
+      <!-- Логотип -->
+      <div class="email-logo-block">
+        ${getLogoImg()}
+      </div>
 
       <!-- Контент -->
       ${content}
