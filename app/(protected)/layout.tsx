@@ -38,9 +38,10 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   }
 
   // Об'єднуємо дані з сесії та БД
-  // Використовуємо актуальне значення image з БД (Better Auth кешує це поле)
+  // Використовуємо актуальні значення image та name з БД (Better Auth кешує ці поля в сесії)
   const user: ExtendedUser = {
     ...sessionUser,
+    name: dbUser.name, // Використовуємо актуальне значення з БД (сесія кешується на 5 хв)
     image: dbUser.image || null, // Використовуємо актуальне значення з БД
   };
 
