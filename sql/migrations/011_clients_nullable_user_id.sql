@@ -35,9 +35,19 @@ ALTER TABLE mx_data.user_contact
 -- ======================================================
 -- 3. Constraint: обов'язковий або user_id, або user_data_id
 -- ======================================================
-ALTER TABLE mx_data.user_contact
-  ADD CONSTRAINT user_contact_owner_check
-    CHECK (user_id IS NOT NULL OR user_data_id IS NOT NULL);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'user_contact_owner_check'
+      AND conrelid = 'mx_data.user_contact'::regclass
+  ) THEN
+    ALTER TABLE mx_data.user_contact
+      ADD CONSTRAINT user_contact_owner_check
+        CHECK (user_id IS NOT NULL OR user_data_id IS NOT NULL);
+  END IF;
+END;
+$$;
 
 -- ======================================================
 -- 4. Індекс is_default: враховує обидва ключі
@@ -302,11 +312,21 @@ EXECUTE FUNCTION mx_data.fn_user_contact_aid_maintain_default();
 -- ======================================================
 -- 7. user_data_legal: додати FK до user_data
 -- ======================================================
-ALTER TABLE mx_data.user_data_legal
-  ADD CONSTRAINT IF NOT EXISTS user_data_legal_user_data_fk
-    FOREIGN KEY (user_data_id)
-    REFERENCES mx_data.user_data(id)
-    ON DELETE CASCADE;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'user_data_legal_user_data_fk'
+      AND conrelid = 'mx_data.user_data_legal'::regclass
+  ) THEN
+    ALTER TABLE mx_data.user_data_legal
+      ADD CONSTRAINT user_data_legal_user_data_fk
+        FOREIGN KEY (user_data_id)
+        REFERENCES mx_data.user_data(id)
+        ON DELETE CASCADE;
+  END IF;
+END;
+$$;
 
 -- Додати індекс для user_data_id в user_contact (для клієнтів без акаунту)
 CREATE INDEX IF NOT EXISTS user_contact_user_data_id_idx

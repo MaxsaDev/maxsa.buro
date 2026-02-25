@@ -255,6 +255,183 @@ export async function getClientLegal(userDataId: string): Promise<ClientLegal | 
 }
 
 /**
+ * Інтерфейс контакту клієнта
+ */
+export interface ClientContact {
+  id: string;
+  contact_value: string;
+  is_default: boolean;
+  contact_type_code: string;
+  contact_type_title: string;
+  contact_url: string | null;
+}
+
+/**
+ * Отримати всі контакти клієнта (за user_data_id)
+ * Підтримує обидва варіанти: через user_id (зареєстровані) або user_data_id (без акаунту)
+ */
+export async function getClientContacts(userDataId: string): Promise<ClientContact[]> {
+  try {
+    const sql = `
+      SELECT
+        uc.id,
+        uc.contact_value,
+        uc.is_default,
+        dct.code  AS contact_type_code,
+        dct.title AS contact_type_title,
+        mx_data.fn_contact_build_url(dct.code, uc.contact_value) AS contact_url
+      FROM mx_data.user_contact uc
+      INNER JOIN mx_dic.dic_contact_type dct ON dct.id = uc.contact_type_id
+      WHERE uc.user_data_id = $1
+         OR (
+           uc.user_id IS NOT NULL
+           AND uc.user_id = (SELECT user_id FROM mx_data.user_data WHERE id = $1 AND user_id IS NOT NULL)
+         )
+      ORDER BY uc.is_default DESC, uc.created_at ASC
+    `;
+    const result = await pool.query<ClientContact>(sql, [userDataId]);
+    return result.rows;
+  } catch (error) {
+    console.error('[getClientContacts] Помилка отримання контактів клієнта:', error);
+    throw error;
+  }
+}
+
+/**
+ * Оновити повне ім'я клієнта без акаунту
+ */
+export async function updateClientFullName(userDataId: string, fullName: string): Promise<void> {
+  try {
+    const result = await pool.query(
+      `UPDATE mx_data.user_data
+       SET full_name = $1
+       WHERE id = $2 AND user_id IS NULL`,
+      [fullName, userDataId]
+    );
+    if (result.rowCount === 0) {
+      throw new Error('Запис не знайдено або редагування заборонено');
+    }
+  } catch (error) {
+    console.error('[updateClientFullName] Помилка оновлення імені клієнта:', error);
+    throw error;
+  }
+}
+
+/**
+ * Додати контакт клієнту без акаунту
+ */
+export async function addClientContact(
+  userDataId: string,
+  contactTypeId: number,
+  contactValue: string
+): Promise<{ id: string }> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Якщо контактів ще немає — перший стає дефолтним
+    const countResult = await client.query<{ count: string }>(
+      `SELECT COUNT(*) AS count FROM mx_data.user_contact WHERE user_data_id = $1`,
+      [userDataId]
+    );
+    const isDefault = parseInt(countResult.rows[0]?.count ?? '0') === 0;
+
+    const result = await client.query<{ id: string }>(
+      `INSERT INTO mx_data.user_contact (user_id, user_data_id, contact_type_id, contact_value, is_default)
+       VALUES (NULL, $1, $2, $3, $4)
+       RETURNING id`,
+      [userDataId, contactTypeId, contactValue, isDefault]
+    );
+
+    if (!result.rows[0]) {
+      throw new Error('Не вдалося додати контакт');
+    }
+
+    await client.query('COMMIT');
+    return result.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('[addClientContact] Помилка додавання контакту:', error);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Встановити контакт клієнта за замовчуванням
+ */
+export async function setClientDefaultContact(
+  userDataId: string,
+  contactId: string
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const result = await client.query(
+      `UPDATE mx_data.user_contact
+       SET is_default = true
+       WHERE id = $1 AND user_data_id = $2`,
+      [contactId, userDataId]
+    );
+
+    if (result.rowCount === 0) {
+      throw new Error('Контакт не знайдено або не належить клієнту');
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error(
+      '[setClientDefaultContact] Помилка встановлення контакту за замовчуванням:',
+      error
+    );
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Видалити контакт клієнта
+ */
+export async function deleteClientContact(userDataId: string, contactId: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Перевіряємо чи залишиться хоча б 1 контакт
+    const countResult = await client.query<{ count: string }>(
+      `SELECT COUNT(*) AS count FROM mx_data.user_contact WHERE user_data_id = $1`,
+      [userDataId]
+    );
+    if (parseInt(countResult.rows[0]?.count ?? '0') <= 1) {
+      throw new Error('Неможливо видалити єдиний контакт клієнта');
+    }
+
+    const result = await client.query(
+      `DELETE FROM mx_data.user_contact
+       WHERE id = $1 AND user_data_id = $2
+       RETURNING id`,
+      [contactId, userDataId]
+    );
+
+    if (result.rowCount === 0) {
+      throw new Error('Контакт не знайдено або не належить клієнту');
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('[deleteClientContact] Помилка видалення контакту:', error);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Отримати клієнта за user_data_id
  */
 export async function getClientById(userDataId: string): Promise<ClientView | null> {

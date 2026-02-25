@@ -1,16 +1,18 @@
-import { format } from 'date-fns';
-import { uk } from 'date-fns/locale';
-import { ArrowLeft, BriefcaseBusiness, Phone, User } from 'lucide-react';
+import { ArrowLeft, BriefcaseBusiness } from 'lucide-react';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import { Suspense } from 'react';
 
+import { getContactTypesAction } from '@/actions/profile/get-contact-types';
+import { ClientContactsView } from '@/components/mx-job/clients/client-contacts-view';
+import { ClientEditView } from '@/components/mx-job/clients/client-edit-view';
+import { ClientInfoView } from '@/components/mx-job/clients/client-info-view';
+import { ClientTabs } from '@/components/mx-job/clients/client-tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { getClientById, getClientLegal } from '@/data/mx-data/clients';
+import { getClientById, getClientContacts } from '@/data/mx-data/clients';
 import { getCurrentUser } from '@/lib/auth/auth-server';
-import { contactIconMap } from '@/lib/icon/get-icon';
 
 interface Props {
   params: Promise<{ clients_id: string }>;
@@ -22,10 +24,13 @@ export default async function Page({ params }: Props) {
 
   const { clients_id } = await params;
   const client = await getClientById(clients_id);
-
   if (!client) notFound();
 
-  const legal = client.has_legal ? await getClientLegal(clients_id) : null;
+  // Завантажуємо дані для вкладки "Редагування" паралельно
+  const [contactTypes, contacts] = await Promise.all([
+    getContactTypesAction(),
+    getClientContacts(clients_id),
+  ]);
 
   const initials = client.full_name
     .split(' ')
@@ -33,11 +38,6 @@ export default async function Page({ params }: Props) {
     .join('')
     .slice(0, 2)
     .toUpperCase();
-
-  const ContactIcon =
-    client.contact_type_code && contactIconMap[client.contact_type_code]
-      ? contactIconMap[client.contact_type_code]
-      : Phone;
 
   return (
     <div className="space-y-6">
@@ -73,121 +73,20 @@ export default async function Page({ params }: Props) {
 
       <Separator />
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Основна інформація */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <User className="size-4" />
-              Основна інформація
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground shrink-0">Повне імʼя</span>
-              <span className="text-right font-medium">{client.full_name}</span>
-            </div>
-
-            {client.contact_value && (
-              <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground shrink-0">Основний контакт</span>
-                <div className="flex items-center gap-1.5">
-                  <ContactIcon className="text-muted-foreground size-3.5 shrink-0" />
-                  {client.contact_url ? (
-                    <Link
-                      href={client.contact_url}
-                      target="_blank"
-                      className="font-medium hover:underline"
-                    >
-                      {client.contact_value}
-                    </Link>
-                  ) : (
-                    <span className="font-medium">{client.contact_value}</span>
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground shrink-0">Доданий</span>
-              <span className="font-medium">
-                {format(new Date(client.created_at), 'dd MMMM yyyy', { locale: uk })}
-              </span>
-            </div>
-
-            <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground shrink-0">Оновлений</span>
-              <span className="font-medium">
-                {format(new Date(client.updated_at), 'dd MMMM yyyy', { locale: uk })}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Юридичні дані */}
-        {legal && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <BriefcaseBusiness className="size-4" />
-                Юридичні дані
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground shrink-0">ЄДРПОУ</span>
-                <span className="font-mono font-medium">{legal.data_edrpou}</span>
-              </div>
-              {legal.tin && (
-                <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground shrink-0">ІПН</span>
-                  <span className="font-mono font-medium">{legal.tin}</span>
-                </div>
-              )}
-              {legal.data_address_legal && (
-                <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground shrink-0">Юр. адреса</span>
-                  <span className="text-right font-medium">{legal.data_address_legal}</span>
-                </div>
-              )}
-              {legal.data_address && (
-                <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground shrink-0">Факт. адреса</span>
-                  <span className="text-right font-medium">{legal.data_address}</span>
-                </div>
-              )}
-              {legal.data_bank && (
-                <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground shrink-0">Банк</span>
-                  <span className="text-right font-medium">{legal.data_bank}</span>
-                </div>
-              )}
-              {legal.data_account && (
-                <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground shrink-0">Р/р</span>
-                  <span className="text-right font-mono font-medium break-all">
-                    {legal.data_account}
-                  </span>
-                </div>
-              )}
-              {legal.mfo_bank && (
-                <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground shrink-0">МФО</span>
-                  <span className="font-mono font-medium">{legal.mfo_bank}</span>
-                </div>
-              )}
-              {legal.post_director && legal.data_director && (
-                <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground shrink-0">Директор</span>
-                  <span className="text-right font-medium">
-                    {legal.post_director}: {legal.data_director}
-                  </span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-      </div>
+      {/* Вкладки */}
+      <ClientTabs
+        infoContent={
+          <div className="space-y-6">
+            <ClientInfoView client={client} />
+            <Suspense fallback={<div className="bg-muted h-32 animate-pulse rounded-lg" />}>
+              <ClientContactsView userDataId={clients_id} />
+            </Suspense>
+          </div>
+        }
+        editContent={
+          <ClientEditView client={client} contactTypes={contactTypes} initialContacts={contacts} />
+        }
+      />
     </div>
   );
 }
