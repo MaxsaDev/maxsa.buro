@@ -1,9 +1,9 @@
 'use client';
 
-import { Building2, Menu, Shield, User } from 'lucide-react';
+import { Building2, Globe2, Menu, Shield, User } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 
-type TabId = 'user-data' | 'user-offices' | 'user-menu' | 'user-permissions';
+type TabId = 'user-data' | 'user-offices' | 'user-menu' | 'user-general-menu' | 'user-permissions';
 
 interface Tab {
   id: TabId;
@@ -16,6 +16,7 @@ interface UserDataTabsProps {
   userDataContent: ReactNode;
   userOfficesContent: ReactNode;
   userMenuContent: ReactNode;
+  userGeneralMenuContent: ReactNode;
   userPermissionsContent: ReactNode;
 }
 
@@ -40,6 +41,12 @@ const tabs: Tab[] = [
     icon: Menu,
   },
   {
+    id: 'user-general-menu',
+    label: 'Загальне',
+    description: 'Загальне меню',
+    icon: Globe2,
+  },
+  {
     id: 'user-permissions',
     label: 'Доступи',
     description: 'Повноваження користувача',
@@ -51,6 +58,7 @@ export const UserDataTabs = ({
   userDataContent,
   userOfficesContent,
   userMenuContent,
+  userGeneralMenuContent,
   userPermissionsContent,
 }: UserDataTabsProps) => {
   const [activeTab, setActiveTab] = useState<TabId>('user-data');
@@ -96,6 +104,7 @@ export const UserDataTabs = ({
       {activeTab === 'user-data' && userDataContent}
       {activeTab === 'user-offices' && userOfficesContent}
       {activeTab === 'user-menu' && userMenuContent}
+      {activeTab === 'user-general-menu' && userGeneralMenuContent}
       {activeTab === 'user-permissions' && userPermissionsContent}
     </>
   );

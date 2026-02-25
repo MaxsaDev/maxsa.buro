@@ -6,6 +6,7 @@ import {
   updateMenuUserItemsDefault,
   updateMenuUserSectionsItemsDefault,
 } from '@/data/mx-dic/menu-admin';
+import { updateMenuGeneralItemDefault } from '@/data/mx-dic/menu-general';
 import type { ActionStatus } from '@/interfaces/action-status';
 import { getCurrentUser } from '@/lib/auth/auth-server';
 
@@ -129,6 +130,64 @@ export async function toggleMenuUserSectionsItemsDefaultAction(
     return {
       status: 'error',
       message: 'Невідома помилка при переключенні is_default пункту меню',
+      code: 'UNKNOWN_ERROR',
+    };
+  }
+}
+
+/**
+ * Server Action для переключення is_default пункту загального меню
+ */
+export async function toggleMenuGeneralItemDefaultAction(
+  id: number,
+  isDefault: boolean
+): Promise<ActionStatus> {
+  try {
+    const admin = await getCurrentUser();
+
+    if (!admin) {
+      return {
+        status: 'error',
+        message: 'Ви не авторизовані. Увійдіть в систему.',
+        code: 'UNAUTHORIZED',
+      };
+    }
+
+    if (admin.role !== 'admin') {
+      return {
+        status: 'error',
+        message: 'Доступ заборонено. Потрібні права адміністратора.',
+        code: 'FORBIDDEN',
+      };
+    }
+
+    await updateMenuGeneralItemDefault(id, isDefault);
+
+    console.log(
+      `[toggleMenuGeneralItemDefaultAction] Пункт загального меню ${id} ${isDefault ? 'встановлено' : 'знято'} як за замовчуванням`
+    );
+
+    revalidatePath('/mx-admin/menu-app');
+    revalidatePath('/(protected)', 'layout');
+
+    return {
+      status: 'success',
+      message: `Пункт меню ${isDefault ? 'встановлено' : 'знято'} як за замовчуванням`,
+    };
+  } catch (error) {
+    console.error('[toggleMenuGeneralItemDefaultAction] Помилка переключення is_default:', error);
+
+    if (error instanceof Error) {
+      return {
+        status: 'error',
+        message: error.message,
+        code: 'DB_ERROR',
+      };
+    }
+
+    return {
+      status: 'error',
+      message: 'Невідома помилка при переключенні is_default пункту загального меню',
       code: 'UNKNOWN_ERROR',
     };
   }

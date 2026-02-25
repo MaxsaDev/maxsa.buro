@@ -1,8 +1,8 @@
-import { betterAuth } from 'better-auth';
-import type { BetterAuthOptions } from 'better-auth';
 import { passkey } from '@better-auth/passkey';
-import { twoFactor } from 'better-auth/plugins';
+import type { BetterAuthOptions } from 'better-auth';
+import { betterAuth } from 'better-auth';
 import { nextCookies } from 'better-auth/next-js';
+import { twoFactor } from 'better-auth/plugins';
 
 import { getBaseUrl } from '@/lib/auth/base-url';
 import { pool } from '@/lib/db';
@@ -115,7 +115,7 @@ const createAuthConfig = (): BetterAuthOptions => ({
     }),
     // ✅ ОФІЦІЙНИЙ Better Auth 2FA Plugin (TOTP)
     twoFactor({
-      issuer: process.env.NEXT_PUBLIC_APP_NAME || 'Maxsa SP',
+      issuer: process.env.NEXT_PUBLIC_APP_NAME || 'Maxsa Buro',
       // TOTP (Time-based OTP) для Google Authenticator, Authy, тощо
       // Backup codes генеруються автоматично
     }),

@@ -4,6 +4,28 @@
 -- ============================================================
 
 -- ============================================================
+-- ОЧИСТКА: видалити все перед відтворенням з нуля
+-- ============================================================
+
+-- Кастомні схеми (CASCADE видаляє всі таблиці, функції, тригери, views)
+DROP SCHEMA IF EXISTS mx_data    CASCADE;
+DROP SCHEMA IF EXISTS mx_system  CASCADE;
+DROP SCHEMA IF EXISTS mx_dic     CASCADE;
+DROP SCHEMA IF EXISTS mx_global  CASCADE;
+
+-- Better Auth таблиці (public схема)
+DROP VIEW  IF EXISTS public.user_view CASCADE;
+DROP TABLE IF EXISTS passkey        CASCADE;
+DROP TABLE IF EXISTS "twoFactor"    CASCADE;
+DROP TABLE IF EXISTS verification   CASCADE;
+DROP TABLE IF EXISTS account        CASCADE;
+DROP TABLE IF EXISTS session        CASCADE;
+DROP TABLE IF EXISTS "user"         CASCADE;
+
+-- Глобальні функції public схеми
+DROP FUNCTION IF EXISTS public.set_updated_at() CASCADE;
+
+-- ============================================================
 -- РОЗШИРЕННЯ
 -- ============================================================
 CREATE EXTENSION IF NOT EXISTS citext;        -- case-insensitive текст
@@ -194,7 +216,7 @@ CREATE TABLE IF NOT EXISTS mx_dic.dic_contact_type (
 );
 
 COMMENT ON TABLE mx_dic.dic_contact_type IS
-'Словник каналів зв’язку з метаданими (назва, іконка, URL-префікс, активність).';
+'Словник каналів звʼязку з метаданими (назва, іконка, URL-префікс, активність).';
 
 INSERT INTO mx_dic.dic_contact_type (code, title, title_en, url_prefix, sort_order) VALUES
  ('phone',     'Телефон',              'Phone',     'tel:',                   10),
@@ -225,11 +247,12 @@ CREATE TABLE IF NOT EXISTS mx_dic.menu_types (
 );
 
 COMMENT ON TABLE mx_dic.menu_types IS
-'Словник типів меню: sections (з секціями та пунктами), items (тільки пункти).';
+'Словник типів меню: sections (з секціями та пунктами), items (тільки пункти), general (загальне — без офісу).';
 
 INSERT INTO mx_dic.menu_types (code, title, sort_order) VALUES
  ('sections', 'Меню з секціями та пунктами', 10),
- ('items',    'Меню з пунктами',              20)
+ ('items',    'Меню з пунктами',              20),
+ ('general',  'Загальне меню (без офісу)',    30)
 ON CONFLICT (code) DO NOTHING;
 
 -- Меню
@@ -254,6 +277,15 @@ COMMENT ON TABLE mx_dic.menus IS
 CREATE INDEX IF NOT EXISTS idx_menus_sort_order ON mx_dic.menus(sort_order);
 CREATE INDEX IF NOT EXISTS idx_menus_menu_type_id ON mx_dic.menus(menu_type_id);
 CREATE INDEX IF NOT EXISTS idx_menus_is_active ON mx_dic.menus(is_active);
+
+-- Базовий запис меню типу 'general'
+INSERT INTO mx_dic.menus (title, menu_type_id, sort_order, is_active)
+SELECT 'Загальне меню', mt.id, 50, TRUE
+FROM mx_dic.menu_types mt
+WHERE mt.code = 'general'
+  AND NOT EXISTS (
+    SELECT 1 FROM mx_dic.menus m WHERE m.menu_type_id = mt.id
+  );
 
 -- Категорії меню з секціями
 CREATE TABLE IF NOT EXISTS mx_dic.menu_user_sections_category
@@ -327,6 +359,30 @@ COMMENT ON COLUMN mx_dic.menu_user_items.is_default IS
 CREATE INDEX IF NOT EXISTS idx_menu_user_items_menu_id
   ON mx_dic.menu_user_items(menu_id);
 
+-- Пункти загального меню (без прив'язки до офісу)
+CREATE TABLE IF NOT EXISTS mx_dic.menu_general_items
+(
+  id          SERIAL      PRIMARY KEY,
+  menu_id     int         NOT NULL,
+  title       text        NOT NULL,
+  icon        text        NOT NULL,
+  url         text        NOT NULL,
+  sort_order  int         NOT NULL DEFAULT 100,
+  is_active   boolean     NOT NULL DEFAULT TRUE,
+  is_default  boolean     NOT NULL DEFAULT FALSE,
+
+  CONSTRAINT menu_general_items_fk_menu
+    FOREIGN KEY (menu_id)
+    REFERENCES mx_dic.menus(id)
+    ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_menu_general_items_menu_id
+  ON mx_dic.menu_general_items(menu_id);
+
+COMMENT ON TABLE mx_dic.menu_general_items IS
+'Пункти загального меню. Відображаються в сайдбарі завжди, незалежно від вибраного офісу.';
+
 -- Меню підтримки
 CREATE TABLE IF NOT EXISTS mx_dic.menu_app_support
 (
@@ -360,7 +416,7 @@ CREATE TABLE IF NOT EXISTS mx_dic.user_permissions_category
 );
 
 INSERT INTO mx_dic.user_permissions_category (title, description, icon, is_active) VALUES
- ('Документація', 'Створення документації застосунку', 'CircleCheck', true)
+ ('Призначення', 'Призначення на ролі та посади', 'CircleCheck', true)
 ON CONFLICT DO NOTHING;
 
 -- Пункти повноважень
@@ -380,9 +436,8 @@ CREATE TABLE IF NOT EXISTS mx_dic.user_permissions_items
 );
 
 INSERT INTO mx_dic.user_permissions_items (category_id, title, description, sort_order, is_active) VALUES
- (1, 'Створення категорій документації', 'Дозволяє створювати категорії документації', 100, true),
- (1, 'Створення розділів документації', 'Дозволяє створювати розділи документації', 200, true),
- (1, 'Створення статей документації', 'Дозволяє створювати статті документації', 300, true)
+ (1, 'Призначення працівників', 'Дозволяє призначати працівників до офісу', 100, true),
+ (1, 'Призначення виконавців', 'Дозволяє призначати виконавців', 200, true)
 ON CONFLICT DO NOTHING;
 
 -- Офіси / філії компанії
@@ -410,19 +465,31 @@ CREATE INDEX IF NOT EXISTS idx_offices_sort_order ON mx_dic.offices(sort_order);
 CREATE INDEX IF NOT EXISTS idx_offices_is_active ON mx_dic.offices(is_active);
 CREATE INDEX IF NOT EXISTS idx_offices_city ON mx_dic.offices(city);
 
+-- Посади виконавців
+CREATE TABLE IF NOT EXISTS mx_dic.dic_posts_assignee
+(
+    id    SMALLSERIAL PRIMARY KEY,
+    title VARCHAR(20) NOT NULL
+);
+
+INSERT INTO mx_dic.dic_posts_assignee (title)
+SELECT v.title
+FROM (VALUES ('Кандидат'), ('Перекладач'), ('Нотаріус'), ('Курʼєр')) AS v(title)
+WHERE NOT EXISTS (SELECT 1 FROM mx_dic.dic_posts_assignee);
+
 -- ============================================================
 -- MX_SYSTEM: ПРИЗНАЧЕННЯ МЕНЮ, ПОВНОВАЖЕНЬ ТА ОФІСІВ
 -- ============================================================
 
--- Призначення меню з секціями
+-- Призначення меню з секціями (прив'язано до офісу)
 CREATE TABLE IF NOT EXISTS mx_system.nav_user_sections
 (
   id         SERIAL      PRIMARY KEY,
   user_id    text        NOT NULL,
   menu_id    int         NOT NULL,
+  office_id  int         NOT NULL,
   created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   created_by text        NOT NULL,
-  is_auto_assigned boolean NOT NULL DEFAULT false,
 
   CONSTRAINT nav_user_sections_fk_user
     FOREIGN KEY (user_id)
@@ -439,26 +506,30 @@ CREATE TABLE IF NOT EXISTS mx_system.nav_user_sections
     REFERENCES mx_dic.menu_user_sections_items(id)
     ON DELETE CASCADE,
 
-  CONSTRAINT nav_user_sections_user_menu_unique
-    UNIQUE (user_id, menu_id)
+  CONSTRAINT nav_user_sections_fk_office
+    FOREIGN KEY (office_id)
+    REFERENCES mx_dic.offices(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT nav_user_sections_user_menu_office_unique
+    UNIQUE (user_id, menu_id, office_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_nav_user_sections_is_auto_assigned
-  ON mx_system.nav_user_sections(is_auto_assigned, menu_id)
-  WHERE is_auto_assigned = true;
+CREATE INDEX IF NOT EXISTS idx_nav_user_sections_user_office
+  ON mx_system.nav_user_sections(user_id, office_id);
 
-COMMENT ON COLUMN mx_system.nav_user_sections.is_auto_assigned IS
-  'Якщо true, меню було призначено автоматично через тригер при встановленні is_default = true. Такі меню будуть автоматично видалені при знятті is_default = false';
+COMMENT ON COLUMN mx_system.nav_user_sections.office_id IS
+  'Офіс, для якого діє цей дозвіл. Один пункт меню може бути активований для різних офісів незалежно.';
 
--- Призначення меню без секцій
+-- Призначення меню без секцій (прив'язано до офісу)
 CREATE TABLE IF NOT EXISTS mx_system.nav_user_items
 (
   id         SERIAL      NOT NULL PRIMARY KEY,
   user_id    text        NOT NULL,
   menu_id    int         NOT NULL,
+  office_id  int         NOT NULL,
   created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   created_by text        NOT NULL,
-  is_auto_assigned boolean NOT NULL DEFAULT false,
 
   CONSTRAINT nav_user_items_fk_user
     FOREIGN KEY (user_id)
@@ -475,16 +546,52 @@ CREATE TABLE IF NOT EXISTS mx_system.nav_user_items
     REFERENCES mx_dic.menu_user_items(id)
     ON DELETE CASCADE,
 
-  CONSTRAINT nav_user_items_user_menu_unique
+  CONSTRAINT nav_user_items_fk_office
+    FOREIGN KEY (office_id)
+    REFERENCES mx_dic.offices(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT nav_user_items_user_menu_office_unique
+    UNIQUE (user_id, menu_id, office_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_nav_user_items_user_office
+  ON mx_system.nav_user_items(user_id, office_id);
+
+COMMENT ON COLUMN mx_system.nav_user_items.office_id IS
+  'Офіс, для якого діє цей дозвіл. Один пункт меню може бути активований для різних офісів незалежно.';
+
+-- Призначення пунктів загального меню (без прив'язки до офісу)
+CREATE TABLE IF NOT EXISTS mx_system.nav_user_general
+(
+  id               SERIAL      PRIMARY KEY,
+  user_id          text        NOT NULL,
+  menu_id          int         NOT NULL,
+  created_at       timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_by       text        NOT NULL,
+  is_auto_assigned boolean     NOT NULL DEFAULT false,
+
+  CONSTRAINT nav_user_general_fk_user
+    FOREIGN KEY (user_id)
+    REFERENCES public."user"(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT nav_user_general_fk_created_by
+    FOREIGN KEY (created_by)
+    REFERENCES public."user"(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT nav_user_general_fk_menu_item
+    FOREIGN KEY (menu_id)
+    REFERENCES mx_dic.menu_general_items(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT nav_user_general_user_menu_unique
     UNIQUE (user_id, menu_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_nav_user_items_is_auto_assigned
-  ON mx_system.nav_user_items(is_auto_assigned, menu_id)
-  WHERE is_auto_assigned = true;
-
-COMMENT ON COLUMN mx_system.nav_user_items.is_auto_assigned IS
-  'Якщо true, меню було призначено автоматично через тригер при встановленні is_default = true. Такі меню будуть автоматично видалені при знятті is_default = false';
+CREATE INDEX IF NOT EXISTS idx_nav_user_general_user_id
+  ON mx_system.nav_user_general(user_id);
 
 -- Призначення повноважень
 CREATE TABLE IF NOT EXISTS mx_system.nav_user_permissions
@@ -520,6 +627,7 @@ CREATE TABLE IF NOT EXISTS mx_system.user_offices
   id         SERIAL      PRIMARY KEY,
   user_id    text        NOT NULL,
   office_id  int         NOT NULL,
+  is_default boolean     NOT NULL DEFAULT FALSE,
   created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   created_by text        NOT NULL,
 
@@ -546,40 +654,10 @@ CREATE TABLE IF NOT EXISTS mx_system.user_offices
 -- MX_DATA: ПЕРСОНАЛЬНІ ДАНІ
 -- ============================================================
 
--- Контакти
-CREATE TABLE IF NOT EXISTS mx_data.user_contact (
-  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id         text NOT NULL,
-  contact_type_id smallint NOT NULL,
-  contact_value   citext  NOT NULL,
-  is_default      boolean NOT NULL DEFAULT false,
-
-  created_at      timestamptz NOT NULL DEFAULT now(),
-  updated_at      timestamptz NOT NULL DEFAULT now(),
-
-  CONSTRAINT user_contact_user_fk
-    FOREIGN KEY (user_id)         REFERENCES public."user"(id)           ON DELETE CASCADE,
-  CONSTRAINT user_contact_type_fk
-    FOREIGN KEY (contact_type_id) REFERENCES mx_dic.dic_contact_type(id) ON DELETE RESTRICT,
-
-  CONSTRAINT user_contact_unique_per_user UNIQUE (user_id, contact_type_id, contact_value)
-);
-
-COMMENT ON TABLE mx_data.user_contact IS
-'Контакти користувачів (словникові типи). Забезпечує множинні канали зв’язку; рівно один is_default=TRUE на user_id.';
-
-CREATE INDEX IF NOT EXISTS user_contact_user_idx ON mx_data.user_contact (user_id);
-CREATE INDEX IF NOT EXISTS user_contact_type_idx ON mx_data.user_contact (contact_type_id);
-
-DROP INDEX IF EXISTS mx_data.user_contact_default_one_per_user_idx;
-CREATE UNIQUE INDEX IF NOT EXISTS user_contact_default_one_per_user_idx
-  ON mx_data.user_contact (user_id)
-  WHERE is_default = TRUE;
-
--- Профілі
+-- Профілі (user_data перед user_contact через FK залежність)
 CREATE TABLE IF NOT EXISTS mx_data.user_data (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id     text NOT NULL UNIQUE,
+  user_id     text UNIQUE,              -- FK → public."user"(id); NULL = клієнт без акаунту
   full_name   text NOT NULL,
 
   created_at  timestamptz NOT NULL DEFAULT now(),
@@ -590,16 +668,142 @@ CREATE TABLE IF NOT EXISTS mx_data.user_data (
 );
 
 COMMENT ON TABLE mx_data.user_data IS
-'Профілі користувачів. Кожен профіль повинен мати щонайменше один контакт у mx_data.user_contact.';
+'Профілі користувачів та клієнтів. user_id=NULL означає клієнта без акаунту. Кожен профіль повинен мати щонайменше один контакт у mx_data.user_contact.';
+
+-- Контакти
+CREATE TABLE IF NOT EXISTS mx_data.user_contact (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         text,                                   -- FK → public."user"; NULL для клієнтів без акаунту
+  user_data_id    uuid,                                   -- FK → mx_data.user_data(id); NULL для зареєстрованих
+  contact_type_id smallint NOT NULL,
+  contact_value   citext  NOT NULL,
+  is_default      boolean NOT NULL DEFAULT false,
+
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT user_contact_user_fk
+    FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE,
+  CONSTRAINT user_contact_user_data_fk
+    FOREIGN KEY (user_data_id) REFERENCES mx_data.user_data(id) ON DELETE CASCADE,
+  CONSTRAINT user_contact_type_fk
+    FOREIGN KEY (contact_type_id) REFERENCES mx_dic.dic_contact_type(id) ON DELETE RESTRICT,
+
+  -- Обов'язково: або user_id, або user_data_id
+  CONSTRAINT user_contact_owner_check
+    CHECK (user_id IS NOT NULL OR user_data_id IS NOT NULL)
+);
+
+COMMENT ON TABLE mx_data.user_contact IS
+'Контакти користувачів та клієнтів (словникові типи). user_id для зареєстрованих, user_data_id для клієнтів без акаунту. Рівно один is_default=TRUE на власника.';
+
+CREATE INDEX IF NOT EXISTS user_contact_user_idx         ON mx_data.user_contact (user_id);
+CREATE INDEX IF NOT EXISTS user_contact_user_data_id_idx ON mx_data.user_contact (user_data_id);
+CREATE INDEX IF NOT EXISTS user_contact_type_idx         ON mx_data.user_contact (contact_type_id);
+
+DROP INDEX IF EXISTS mx_data.user_contact_default_one_per_user_idx;
+CREATE UNIQUE INDEX IF NOT EXISTS user_contact_default_one_per_user_idx
+  ON mx_data.user_contact (COALESCE(user_id, user_data_id::text))
+  WHERE is_default = TRUE;
+
+-- Юридичні дані клієнтів (опціональні, 1:1 до user_data)
+CREATE TABLE IF NOT EXISTS mx_data.user_data_legal (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_data_id    uuid NOT NULL,
+  data_address    VARCHAR(250) NULL,
+  data_address_legal VARCHAR(250) NULL,
+  phone           VARCHAR(20) NULL,
+  email           VARCHAR(50) NULL,
+  data_edrpou     VARCHAR(10) NOT NULL,
+  tin             VARCHAR(12) NULL,
+  data_account    VARCHAR(29) NULL,
+  data_bank       VARCHAR(50) NULL,
+  mfo_bank        VARCHAR(6) NULL,
+  post_director   VARCHAR(255) NULL,
+  data_director   VARCHAR(50) NULL,
+  phone_director  VARCHAR(20) NULL,
+  data_accountant VARCHAR(50) NULL,
+  phone_accountant VARCHAR(20) NULL,
+  data_contact    VARCHAR(50) NULL,
+  phone_contact   VARCHAR(20) NULL,
+  description     VARCHAR(250) NULL,
+
+  CONSTRAINT user_data_legal_unique_user_data UNIQUE (user_data_id),
+  CONSTRAINT user_data_legal_user_data_fk
+    FOREIGN KEY (user_data_id)
+    REFERENCES mx_data.user_data(id)
+    ON DELETE CASCADE
+);
+
+COMMENT ON TABLE mx_data.user_data_legal IS
+'Юридичні дані клієнтів. 1:1 до mx_data.user_data. Обовʼязковий: ЄДРПОУ (data_edrpou).';
+
+-- ============================================================
+-- mx_data.assignee_data — виконавці послуг
+-- ============================================================
+CREATE TABLE IF NOT EXISTS mx_data.assignee_data
+(
+    id               uuid         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_data_id     uuid         NOT NULL,
+    user_id          text         NULL,
+    post_assignee_id INTEGER      NOT NULL,
+    description      TEXT         NULL,
+    updated_by       text         NULL,
+    created_at       timestamptz  NOT NULL DEFAULT now(),
+    updated_at       timestamptz  NOT NULL DEFAULT now(),
+
+    CONSTRAINT assignee_data_fk_user_data
+        FOREIGN KEY (user_data_id) REFERENCES mx_data.user_data (id) ON DELETE CASCADE,
+    CONSTRAINT assignee_data_fk_user
+        FOREIGN KEY (user_id) REFERENCES public."user" (id) ON DELETE SET NULL,
+    CONSTRAINT assignee_data_fk_updated_by
+        FOREIGN KEY (updated_by) REFERENCES public."user" (id) ON DELETE SET NULL,
+    CONSTRAINT assignee_data_fk_post_assignee
+        FOREIGN KEY (post_assignee_id) REFERENCES mx_dic.dic_posts_assignee (id) ON DELETE RESTRICT,
+    CONSTRAINT assignee_data_unique_user_data_id
+        UNIQUE (user_data_id)
+);
+
+CREATE INDEX IF NOT EXISTS assignee_data_user_data_id_idx ON mx_data.assignee_data (user_data_id);
+CREATE INDEX IF NOT EXISTS assignee_data_user_id_idx      ON mx_data.assignee_data (user_id);
+CREATE INDEX IF NOT EXISTS assignee_data_post_idx         ON mx_data.assignee_data (post_assignee_id);
+
+COMMENT ON TABLE mx_data.assignee_data IS
+'Виконавці послуг. Кожен запис відповідає одній особі (user_data). Звʼязок з офісами — через mx_data.assignee_offices.';
+
+-- ============================================================
+-- mx_data.assignee_offices — зв'язок виконавець↔офіс (M:M)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS mx_data.assignee_offices
+(
+    id               uuid        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    assignee_data_id uuid        NOT NULL,
+    office_id        int         NOT NULL,
+    is_default       boolean     NOT NULL DEFAULT FALSE,
+    created_at       timestamptz NOT NULL DEFAULT now(),
+
+    CONSTRAINT assignee_offices_fk_assignee
+        FOREIGN KEY (assignee_data_id) REFERENCES mx_data.assignee_data (id) ON DELETE CASCADE,
+    CONSTRAINT assignee_offices_fk_office
+        FOREIGN KEY (office_id) REFERENCES mx_dic.offices (id) ON DELETE CASCADE,
+    CONSTRAINT assignee_offices_unique
+        UNIQUE (assignee_data_id, office_id)
+);
+
+CREATE INDEX IF NOT EXISTS assignee_offices_assignee_idx ON mx_data.assignee_offices (assignee_data_id);
+CREATE INDEX IF NOT EXISTS assignee_offices_office_idx   ON mx_data.assignee_offices (office_id);
+
+COMMENT ON TABLE mx_data.assignee_offices IS
+'Привʼязка виконавців до офісів. Відсутність записів = виконавець для всіх офісів. Наявність записів = лише для вказаних офісів. is_default = офіс за замовчуванням.';
 
 -- ============================================================
 -- ФУНКЦІЇ ТА ТРИГЕРИ: SORT_ORDER
 -- ============================================================
 
 -- menus sort_order
-DROP FUNCTION IF EXISTS mx_dic.fn_menus_bi_sort_order();
-DROP FUNCTION IF EXISTS mx_dic.fn_menus_bu_sort_order_reorder();
-DROP FUNCTION IF EXISTS mx_dic.fn_menus_ad_sort_order_reorder();
+DROP FUNCTION IF EXISTS mx_dic.fn_menus_bi_sort_order() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_menus_bu_sort_order_reorder() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_menus_ad_sort_order_reorder() CASCADE;
 
 CREATE OR REPLACE FUNCTION mx_dic.fn_menus_bi_sort_order()
 RETURNS TRIGGER AS $$
@@ -680,9 +884,9 @@ CREATE TRIGGER trg_menus_ad_sort_order_reorder
   EXECUTE FUNCTION mx_dic.fn_menus_ad_sort_order_reorder();
 
 -- menu_user_sections_items sort_order
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_items_bi_sort_order();
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_items_bu_sort_order_reorder();
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_items_ad_sort_order_reorder();
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_items_bi_sort_order() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_items_bu_sort_order_reorder() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_items_ad_sort_order_reorder() CASCADE;
 
 CREATE OR REPLACE FUNCTION mx_dic.fn_menu_user_sections_items_bi_sort_order()
 RETURNS TRIGGER AS $$
@@ -771,9 +975,9 @@ CREATE TRIGGER trg_menu_user_sections_items_ad_sort_order_reorder
   EXECUTE FUNCTION mx_dic.fn_menu_user_sections_items_ad_sort_order_reorder();
 
 -- menu_user_items sort_order
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_items_ai_sort_order();
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_items_au_sort_order_reorder();
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_items_ad_sort_order_reorder();
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_items_ai_sort_order() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_items_au_sort_order_reorder() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_items_ad_sort_order_reorder() CASCADE;
 
 CREATE OR REPLACE FUNCTION mx_dic.fn_menu_user_items_ai_sort_order()
 RETURNS TRIGGER AS $$
@@ -854,9 +1058,9 @@ CREATE TRIGGER trg_menu_user_items_ad_sort_order_reorder
   EXECUTE FUNCTION mx_dic.fn_menu_user_items_ad_sort_order_reorder();
 
 -- user_permissions_items sort_order
-DROP FUNCTION IF EXISTS mx_dic.fn_user_permissions_items_bi_sort_order();
-DROP FUNCTION IF EXISTS mx_dic.fn_user_permissions_items_bu_sort_order_reorder();
-DROP FUNCTION IF EXISTS mx_dic.fn_user_permissions_items_ad_sort_order_reorder();
+DROP FUNCTION IF EXISTS mx_dic.fn_user_permissions_items_bi_sort_order() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_user_permissions_items_bu_sort_order_reorder() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_user_permissions_items_ad_sort_order_reorder() CASCADE;
 
 CREATE OR REPLACE FUNCTION mx_dic.fn_user_permissions_items_bi_sort_order()
 RETURNS TRIGGER AS $$
@@ -945,9 +1149,9 @@ CREATE TRIGGER trg_user_permissions_items_ad_sort_order_reorder
   EXECUTE FUNCTION mx_dic.fn_user_permissions_items_ad_sort_order_reorder();
 
 -- offices sort_order
-DROP FUNCTION IF EXISTS mx_dic.fn_offices_bi_sort_order();
-DROP FUNCTION IF EXISTS mx_dic.fn_offices_bu_sort_order_reorder();
-DROP FUNCTION IF EXISTS mx_dic.fn_offices_ad_sort_order_reorder();
+DROP FUNCTION IF EXISTS mx_dic.fn_offices_bi_sort_order() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_offices_bu_sort_order_reorder() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_offices_ad_sort_order_reorder() CASCADE;
 
 CREATE OR REPLACE FUNCTION mx_dic.fn_offices_bi_sort_order()
 RETURNS TRIGGER AS $$
@@ -1034,11 +1238,71 @@ CREATE TRIGGER trg_offices_bu_set_updated_at
   EXECUTE FUNCTION mx_global.set_updated_at();
 
 -- ============================================================
+-- ФУНКЦІЇ ТА ТРИГЕРИ: IS_DEFAULT ДЛЯ USER_OFFICES
+-- ============================================================
+
+DROP FUNCTION IF EXISTS mx_system.fn_user_offices_biu_is_default() CASCADE;
+DROP FUNCTION IF EXISTS mx_system.fn_user_offices_ad_is_default() CASCADE;
+
+CREATE OR REPLACE FUNCTION mx_system.fn_user_offices_biu_is_default()
+    RETURNS TRIGGER AS $$
+BEGIN
+    IF (TG_OP = 'INSERT') THEN
+        IF (SELECT COUNT(*) FROM mx_system.user_offices WHERE user_id = NEW.user_id) = 0 THEN
+            NEW.is_default := TRUE;
+        ELSE
+            NEW.is_default := FALSE;
+        END IF;
+    ELSIF (TG_OP = 'UPDATE' AND NEW.is_default = TRUE AND OLD.is_default = FALSE) THEN
+        UPDATE mx_system.user_offices
+        SET is_default = FALSE
+        WHERE user_id = NEW.user_id AND id != NEW.id;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION mx_system.fn_user_offices_ad_is_default()
+    RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.is_default = TRUE THEN
+        UPDATE mx_system.user_offices
+        SET is_default = TRUE
+        WHERE id = (
+            SELECT id
+            FROM mx_system.user_offices
+            WHERE user_id = OLD.user_id
+            ORDER BY id
+            LIMIT 1
+        );
+    END IF;
+
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_user_offices_biu_is_default ON mx_system.user_offices;
+DROP TRIGGER IF EXISTS trg_user_offices_ad_is_default ON mx_system.user_offices;
+
+CREATE TRIGGER trg_user_offices_biu_is_default
+    BEFORE INSERT OR UPDATE OF is_default
+    ON mx_system.user_offices
+    FOR EACH ROW
+EXECUTE FUNCTION mx_system.fn_user_offices_biu_is_default();
+
+CREATE TRIGGER trg_user_offices_ad_is_default
+    AFTER DELETE
+    ON mx_system.user_offices
+    FOR EACH ROW
+EXECUTE FUNCTION mx_system.fn_user_offices_ad_is_default();
+
+-- ============================================================
 -- ФУНКЦІЇ ТА ТРИГЕРИ: СИНХРОНІЗАЦІЯ АКТИВНОСТІ
 -- ============================================================
 
 -- menu_user_sections_category → menu_user_sections_items
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_category_au_sync_items_active();
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_category_au_sync_items_active() CASCADE;
 CREATE OR REPLACE FUNCTION mx_dic.fn_menu_user_sections_category_au_sync_items_active()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -1061,7 +1325,7 @@ CREATE TRIGGER trg_menu_user_sections_category_au_sync_items_active
   EXECUTE FUNCTION mx_dic.fn_menu_user_sections_category_au_sync_items_active();
 
 -- user_permissions_category → user_permissions_items
-DROP FUNCTION IF EXISTS mx_dic.fn_user_permissions_category_au_sync_items_active();
+DROP FUNCTION IF EXISTS mx_dic.fn_user_permissions_category_au_sync_items_active() CASCADE;
 CREATE OR REPLACE FUNCTION mx_dic.fn_user_permissions_category_au_sync_items_active()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -1085,155 +1349,18 @@ CREATE TRIGGER trg_user_permissions_category_au_sync_items_active
 
 -- ============================================================
 -- ФУНКЦІЇ ТА ТРИГЕРИ: МЕНЮ ЗА ЗАМОВЧУВАННЯМ
+-- (вимкнено — після додавання office_id до nav_user_sections/items
+--  автоматичне призначення стало неоднозначним: неможливо визначити,
+--  для якого офісу призначати. Меню призначається вручну в контексті офісу.)
 -- ============================================================
-
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_items_au_assign_default();
-DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_items_au_assign_default();
-
-CREATE OR REPLACE FUNCTION mx_dic.fn_menu_user_sections_items_au_assign_default()
-RETURNS TRIGGER AS $$
-DECLARE
-  v_category_id int;
-  v_category_is_active boolean;
-  v_menu_id int;
-  v_menu_is_active boolean;
-  v_system_user_id text;
-BEGIN
-  IF OLD.is_default = false AND NEW.is_default = true THEN
-    SELECT
-      c.id,
-      c.is_active,
-      m.id,
-      m.is_active
-    INTO
-      v_category_id,
-      v_category_is_active,
-      v_menu_id,
-      v_menu_is_active
-    FROM mx_dic.menu_user_sections_category c
-    INNER JOIN mx_dic.menus m ON m.id = c.menu_id
-    WHERE c.id = NEW.category_id;
-
-    SELECT id INTO v_system_user_id
-    FROM public."user"
-    WHERE role = 'admin'
-    ORDER BY "createdAt" ASC
-    LIMIT 1;
-
-    IF v_system_user_id IS NULL THEN
-      SELECT id INTO v_system_user_id
-      FROM public."user"
-      ORDER BY "createdAt" ASC
-      LIMIT 1;
-    END IF;
-
-    IF NEW.is_active = true
-       AND v_category_is_active = true
-       AND v_menu_is_active = true
-       AND v_system_user_id IS NOT NULL THEN
-
-      INSERT INTO mx_system.nav_user_sections (user_id, menu_id, created_by, is_auto_assigned)
-      SELECT
-        u.id,
-        NEW.id,
-        v_system_user_id,
-        true
-      FROM public."user" u
-      WHERE NOT EXISTS (
-        SELECT 1
-        FROM mx_system.nav_user_sections nus
-        WHERE nus.user_id = u.id
-          AND nus.menu_id = NEW.id
-      );
-    END IF;
-  END IF;
-
-  IF OLD.is_default = true AND NEW.is_default = false THEN
-    DELETE FROM mx_system.nav_user_sections
-    WHERE menu_id = NEW.id
-      AND is_auto_assigned = true;
-  END IF;
-
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION mx_dic.fn_menu_user_items_au_assign_default()
-RETURNS TRIGGER AS $$
-DECLARE
-  v_menu_is_active boolean;
-  v_system_user_id text;
-BEGIN
-  IF OLD.is_default = false AND NEW.is_default = true THEN
-    SELECT is_active
-    INTO v_menu_is_active
-    FROM mx_dic.menus
-    WHERE id = NEW.menu_id;
-
-    SELECT id INTO v_system_user_id
-    FROM public."user"
-    WHERE role = 'admin'
-    ORDER BY "createdAt" ASC
-    LIMIT 1;
-
-    IF v_system_user_id IS NULL THEN
-      SELECT id INTO v_system_user_id
-      FROM public."user"
-      ORDER BY "createdAt" ASC
-      LIMIT 1;
-    END IF;
-
-    IF NEW.is_active = true
-       AND v_menu_is_active = true
-       AND v_system_user_id IS NOT NULL THEN
-
-      INSERT INTO mx_system.nav_user_items (user_id, menu_id, created_by, is_auto_assigned)
-      SELECT
-        u.id,
-        NEW.id,
-        v_system_user_id,
-        true
-      FROM public."user" u
-      WHERE NOT EXISTS (
-        SELECT 1
-        FROM mx_system.nav_user_items nui
-        WHERE nui.user_id = u.id
-          AND nui.menu_id = NEW.id
-      );
-    END IF;
-  END IF;
-
-  IF OLD.is_default = true AND NEW.is_default = false THEN
-    DELETE FROM mx_system.nav_user_items
-    WHERE menu_id = NEW.id
-      AND is_auto_assigned = true;
-  END IF;
-
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_menu_user_sections_items_au_assign_default
   ON mx_dic.menu_user_sections_items;
 DROP TRIGGER IF EXISTS trg_menu_user_items_au_assign_default
   ON mx_dic.menu_user_items;
 
-CREATE TRIGGER trg_menu_user_sections_items_au_assign_default
-  AFTER UPDATE OF is_default ON mx_dic.menu_user_sections_items
-  FOR EACH ROW
-  WHEN (OLD.is_default IS DISTINCT FROM NEW.is_default)
-  EXECUTE FUNCTION mx_dic.fn_menu_user_sections_items_au_assign_default();
-
-CREATE TRIGGER trg_menu_user_items_au_assign_default
-  AFTER UPDATE OF is_default ON mx_dic.menu_user_items
-  FOR EACH ROW
-  WHEN (OLD.is_default IS DISTINCT FROM NEW.is_default)
-  EXECUTE FUNCTION mx_dic.fn_menu_user_items_au_assign_default();
-
-COMMENT ON FUNCTION mx_dic.fn_menu_user_sections_items_au_assign_default() IS
-  'Автоматично призначає пункт меню з секціями всім існуючим користувачам при встановленні is_default = true';
-COMMENT ON FUNCTION mx_dic.fn_menu_user_items_au_assign_default() IS
-  'Автоматично призначає пункт меню без секцій всім існуючим користувачам при встановленні is_default = true';
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_sections_items_au_assign_default() CASCADE;
+DROP FUNCTION IF EXISTS mx_dic.fn_menu_user_items_au_assign_default() CASCADE;
 
 -- ============================================================
 -- MX_DATA: ФУНКЦІЇ ТА ТРИГЕРИ
@@ -1327,7 +1454,7 @@ BEFORE INSERT OR UPDATE ON mx_data.user_contact
 FOR EACH ROW
 EXECUTE FUNCTION mx_data.fn_user_contact_bi_validate();
 
--- Підтримка «рівно один дефолтний» контакт
+-- Підтримка «рівно один дефолтний» контакт (підтримує user_id і user_data_id)
 DROP FUNCTION IF EXISTS mx_data.fn_user_contact_bu_maintain_default() CASCADE;
 CREATE OR REPLACE FUNCTION mx_data.fn_user_contact_bu_maintain_default()
 RETURNS trigger
@@ -1335,9 +1462,15 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
   IF NEW.is_default AND (OLD.is_default IS DISTINCT FROM NEW.is_default) THEN
-    UPDATE mx_data.user_contact
-    SET is_default = FALSE
-    WHERE user_id = NEW.user_id AND id <> NEW.id AND is_default = TRUE;
+    IF NEW.user_id IS NOT NULL THEN
+      UPDATE mx_data.user_contact
+      SET is_default = FALSE
+      WHERE user_id = NEW.user_id AND id <> NEW.id AND is_default = TRUE;
+    ELSIF NEW.user_data_id IS NOT NULL THEN
+      UPDATE mx_data.user_contact
+      SET is_default = FALSE
+      WHERE user_data_id = NEW.user_data_id AND id <> NEW.id AND is_default = TRUE;
+    END IF;
   END IF;
 
   RETURN NEW;
@@ -1364,38 +1497,59 @@ BEGIN
   END IF;
 
   IF TG_OP = 'INSERT' THEN
-    IF NOT EXISTS (SELECT 1 FROM mx_data.user_contact WHERE user_id = NEW.user_id AND id <> NEW.id) THEN
-      IF NEW.is_default IS FALSE THEN
-        UPDATE mx_data.user_contact
-        SET is_default = TRUE
-        WHERE id = NEW.id;
+    IF NEW.user_id IS NOT NULL THEN
+      IF NOT EXISTS (SELECT 1 FROM mx_data.user_contact WHERE user_id = NEW.user_id AND id <> NEW.id) THEN
+        IF NEW.is_default IS FALSE THEN
+          UPDATE mx_data.user_contact SET is_default = TRUE WHERE id = NEW.id;
+        END IF;
       END IF;
-    END IF;
-
-    IF NEW.is_default THEN
-      UPDATE mx_data.user_contact
-      SET is_default = FALSE
-      WHERE user_id = NEW.user_id AND id <> NEW.id AND is_default IS TRUE;
+      IF NEW.is_default THEN
+        UPDATE mx_data.user_contact
+        SET is_default = FALSE
+        WHERE user_id = NEW.user_id AND id <> NEW.id AND is_default IS TRUE;
+      END IF;
+    ELSIF NEW.user_data_id IS NOT NULL THEN
+      IF NOT EXISTS (SELECT 1 FROM mx_data.user_contact WHERE user_data_id = NEW.user_data_id AND id <> NEW.id) THEN
+        IF NEW.is_default IS FALSE THEN
+          UPDATE mx_data.user_contact SET is_default = TRUE WHERE id = NEW.id;
+        END IF;
+      END IF;
+      IF NEW.is_default THEN
+        UPDATE mx_data.user_contact
+        SET is_default = FALSE
+        WHERE user_data_id = NEW.user_data_id AND id <> NEW.id AND is_default IS TRUE;
+      END IF;
     END IF;
 
     RETURN NEW;
 
   ELSIF TG_OP = 'DELETE' THEN
     IF OLD.is_default THEN
-      SELECT EXISTS (SELECT 1 FROM mx_data.user_contact WHERE user_id = OLD.user_id)
-      INTO v_has_others;
+      IF OLD.user_id IS NOT NULL THEN
+        SELECT EXISTS (SELECT 1 FROM mx_data.user_contact WHERE user_id = OLD.user_id)
+        INTO v_has_others;
 
-      IF v_has_others THEN
-        SELECT id
-        INTO v_new_id
-        FROM mx_data.user_contact
-        WHERE user_id = OLD.user_id
-        ORDER BY is_default DESC, updated_at DESC
-        LIMIT 1;
+        IF v_has_others THEN
+          SELECT id INTO v_new_id
+          FROM mx_data.user_contact
+          WHERE user_id = OLD.user_id
+          ORDER BY is_default DESC, updated_at DESC
+          LIMIT 1;
+          UPDATE mx_data.user_contact SET is_default = TRUE WHERE id = v_new_id;
+        END IF;
 
-        UPDATE mx_data.user_contact
-        SET is_default = TRUE
-        WHERE id = v_new_id;
+      ELSIF OLD.user_data_id IS NOT NULL THEN
+        SELECT EXISTS (SELECT 1 FROM mx_data.user_contact WHERE user_data_id = OLD.user_data_id)
+        INTO v_has_others;
+
+        IF v_has_others THEN
+          SELECT id INTO v_new_id
+          FROM mx_data.user_contact
+          WHERE user_data_id = OLD.user_data_id
+          ORDER BY is_default DESC, updated_at DESC
+          LIMIT 1;
+          UPDATE mx_data.user_contact SET is_default = TRUE WHERE id = v_new_id;
+        END IF;
       END IF;
     END IF;
 
@@ -1419,28 +1573,51 @@ BEFORE UPDATE ON mx_data.user_data
 FOR EACH ROW
 EXECUTE FUNCTION mx_global.set_updated_at();
 
--- Інтегриті: профіль має мати мінімум 1 контакт
+-- Інтегриті: профіль має мати мінімум 1 контакт (підтримує user_id і user_data_id)
 DROP FUNCTION IF EXISTS mx_data.fn_check_user_data_has_contacts_aud() CASCADE;
 CREATE OR REPLACE FUNCTION mx_data.fn_check_user_data_has_contacts_aud()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 DECLARE
-  v_user_id text;
-  v_cnt     integer;
+  v_user_id     text;
+  v_user_data_id uuid;
+  v_cnt         integer;
 BEGIN
-  v_user_id := COALESCE(NEW.user_id, OLD.user_id);
+  IF TG_TABLE_NAME = 'user_data' THEN
+    v_user_id     := COALESCE(NEW.user_id, OLD.user_id);
+    v_user_data_id := COALESCE(NEW.id, OLD.id);
 
-  IF NOT EXISTS (SELECT 1 FROM mx_data.user_data WHERE user_id = v_user_id) THEN
-    RETURN NULL;
+    IF NOT EXISTS (SELECT 1 FROM mx_data.user_data WHERE id = v_user_data_id) THEN
+      RETURN NULL;
+    END IF;
+
+  ELSIF TG_TABLE_NAME = 'user_contact' THEN
+    v_user_id     := COALESCE(NEW.user_id, OLD.user_id);
+    v_user_data_id := COALESCE(NEW.user_data_id, OLD.user_data_id);
+
+    IF v_user_id IS NOT NULL THEN
+      IF NOT EXISTS (SELECT 1 FROM mx_data.user_data WHERE user_id = v_user_id) THEN
+        RETURN NULL;
+      END IF;
+      SELECT ud.id INTO v_user_data_id
+      FROM mx_data.user_data ud WHERE ud.user_id = v_user_id LIMIT 1;
+    END IF;
+
+    IF v_user_data_id IS NOT NULL THEN
+      IF NOT EXISTS (SELECT 1 FROM mx_data.user_data WHERE id = v_user_data_id) THEN
+        RETURN NULL;
+      END IF;
+    END IF;
   END IF;
 
   SELECT COUNT(*) INTO v_cnt
-  FROM mx_data.user_contact
-  WHERE user_id = v_user_id;
+  FROM mx_data.user_contact uc
+  WHERE (v_user_id IS NOT NULL AND uc.user_id = v_user_id)
+     OR (v_user_id IS NULL AND v_user_data_id IS NOT NULL AND uc.user_data_id = v_user_data_id);
 
   IF v_cnt < 1 THEN
-    RAISE EXCEPTION 'Порушення цілісності: профіль користувача (%) не має жодного контакту.', v_user_id
+    RAISE EXCEPTION 'Порушення цілісності: профіль (%) не має жодного контакту.', COALESCE(v_user_id, v_user_data_id::text)
       USING ERRCODE = '23514';
   END IF;
 
@@ -1463,7 +1640,7 @@ FOR EACH ROW
 EXECUTE FUNCTION mx_data.fn_check_user_data_has_contacts_aud();
 
 -- Утиліта побудови URL контакту
-DROP FUNCTION IF EXISTS mx_data.fn_contact_build_url(text, citext);
+DROP FUNCTION IF EXISTS mx_data.fn_contact_build_url(text, citext) CASCADE;
 CREATE OR REPLACE FUNCTION mx_data.fn_contact_build_url(p_code text, p_value citext)
 RETURNS text
 LANGUAGE plpgsql
@@ -1557,7 +1734,8 @@ FROM mx_data.user_data ud
     LEFT JOIN LATERAL (
       SELECT c.contact_value, c.contact_type_id
       FROM mx_data.user_contact c
-      WHERE c.user_id = ud.user_id
+      WHERE (ud.user_id IS NOT NULL AND c.user_id = ud.user_id)
+         OR (ud.user_id IS NULL AND c.user_data_id = ud.id)
       ORDER BY c.is_default DESC, c.updated_at DESC
       LIMIT 1
     ) uc ON TRUE
@@ -1586,156 +1764,288 @@ FROM public."user" u
 LEFT JOIN mx_data.user_data ud ON ud.user_id = u.id;
 
 -- mx_system.nav_user_sections_user_view
+-- Показує пункти для поточного дефолтного офісу:
+--   - явно призначені (nav_user_sections) для цього офісу
+--   - АБО is_default = true — для всіх офісів користувача
 CREATE OR REPLACE VIEW mx_system.nav_user_sections_user_view AS
-SELECT
-  u.id                                    AS user_id,
-  m.id                                    AS menu_id,
-  m.title                                 AS menu_title,
-  m.sort_order                            AS menu_sort_order,
-  c.id                                    AS category_id,
-  c.title                                 AS category_title,
-  c.url                                   AS category_url,
-  c.icon                                  AS category_icon,
-  c.is_active                             AS category_is_active,
-  i.id                                    AS item_id,
-  i.title                                 AS item_title,
-  i.icon                                  AS item_icon,
-  i.url                                   AS item_url,
-  i.sort_order                            AS item_sort_order,
-  i.is_active                             AS item_is_active_global
+SELECT DISTINCT ON (u.id, i.id)
+    u.id                                    AS user_id,
+    uo.office_id                            AS office_id,
+    m.id                                    AS menu_id,
+    m.title                                 AS menu_title,
+    m.sort_order                            AS menu_sort_order,
+    c.id                                    AS category_id,
+    c.title                                 AS category_title,
+    c.url                                   AS category_url,
+    c.icon                                  AS category_icon,
+    c.is_active                             AS category_is_active,
+    i.id                                    AS item_id,
+    i.title                                 AS item_title,
+    i.icon                                  AS item_icon,
+    i.url                                   AS item_url,
+    i.sort_order                            AS item_sort_order,
+    i.is_active                             AS item_is_active_global
 FROM
-  mx_system.nav_user_sections nus
-  JOIN public."user" u
-    ON u.id = nus.user_id
-  JOIN mx_dic.menu_user_sections_items i
-    ON i.id = nus.menu_id
-  JOIN mx_dic.menu_user_sections_category c
-    ON c.id = i.category_id
-  JOIN mx_dic.menus m
-    ON m.id = c.menu_id
+    public."user" u
+    JOIN mx_system.user_offices uo
+        ON uo.user_id = u.id
+       AND uo.is_default = TRUE
+    CROSS JOIN mx_dic.menu_user_sections_items i
+    JOIN mx_dic.menu_user_sections_category c
+        ON c.id = i.category_id
+    JOIN mx_dic.menus m
+        ON m.id = c.menu_id
 WHERE
-  m.is_active = TRUE
-  AND c.is_active = TRUE
-  AND i.is_active = TRUE
+    m.is_active = TRUE
+    AND c.is_active = TRUE
+    AND i.is_active = TRUE
+    AND (
+        EXISTS (
+            SELECT 1 FROM mx_system.nav_user_sections nus
+            WHERE nus.user_id = u.id
+              AND nus.menu_id = i.id
+              AND nus.office_id = uo.office_id
+        )
+        OR i.is_default = TRUE
+    )
 ORDER BY
-  u.id,
-  m.sort_order,
-  m.id,
-  c.id,
-  i.sort_order,
-  i.id;
+    u.id,
+    i.id,
+    m.sort_order,
+    m.id,
+    c.id,
+    i.sort_order;
 
 -- mx_system.nav_user_sections_admin_view
+-- 3D-матриця: user × office × menu_item (для адмін-панелі)
 CREATE OR REPLACE VIEW mx_system.nav_user_sections_admin_view AS
 SELECT
-  u.id                                    AS user_id,
-  u.name                                  AS user_name,
-  m.id                                    AS menu_id,
-  m.title                                 AS menu_title,
-  m.sort_order                            AS menu_sort_order,
-  c.id                                    AS category_id,
-  c.title                                 AS category_title,
-  c.url                                   AS category_url,
-  c.icon                                  AS category_icon,
-  c.is_active                             AS category_is_active,
-  i.id                                    AS item_id,
-  i.title                                 AS item_title,
-  i.icon                                  AS item_icon,
-  i.url                                   AS item_url,
-  i.sort_order                            AS item_sort_order,
-  i.is_active                             AS item_is_active_global,
-  (nus.id IS NOT NULL)                    AS item_is_assigned,
-  (nus.id IS NOT NULL)
-    AND i.is_active
-    AND c.is_active
-    AND m.is_active                       AS item_is_effective_active,
-  nus.id                                  AS nav_user_section_id,
-  nus.created_at                          AS created_at,
-  nus.created_by                          AS created_by
+    u.id                                    AS user_id,
+    u.name                                  AS user_name,
+
+    o.id                                    AS office_id,
+    o.title                                 AS office_title,
+
+    m.id                                    AS menu_id,
+    m.title                                 AS menu_title,
+    m.sort_order                            AS menu_sort_order,
+
+    c.id                                    AS category_id,
+    c.title                                 AS category_title,
+    c.url                                   AS category_url,
+    c.icon                                  AS category_icon,
+    c.is_active                             AS category_is_active,
+
+    i.id                                    AS item_id,
+    i.title                                 AS item_title,
+    i.icon                                  AS item_icon,
+    i.url                                   AS item_url,
+    i.sort_order                            AS item_sort_order,
+    i.is_active                             AS item_is_active_global,
+
+    (nus.id IS NOT NULL)                    AS item_is_assigned,
+    (nus.id IS NOT NULL)
+        AND i.is_active
+        AND c.is_active
+        AND m.is_active                     AS item_is_effective_active,
+
+    nus.id                                  AS nav_user_section_id,
+    nus.created_at                          AS created_at,
+    nus.created_by                          AS created_by
 FROM
-  public."user" u
-  CROSS JOIN mx_dic.menus m
-  JOIN mx_dic.menu_user_sections_category c
-    ON c.menu_id = m.id
-  JOIN mx_dic.menu_user_sections_items i
-    ON i.category_id = c.id
-  LEFT JOIN mx_system.nav_user_sections nus
-    ON nus.user_id = u.id
-   AND nus.menu_id = i.id
+    public."user" u
+    CROSS JOIN mx_dic.offices o
+    CROSS JOIN mx_dic.menus m
+    JOIN mx_dic.menu_user_sections_category c
+        ON c.menu_id = m.id
+    JOIN mx_dic.menu_user_sections_items i
+        ON i.category_id = c.id
+    LEFT JOIN mx_system.nav_user_sections nus
+        ON nus.user_id = u.id
+       AND nus.office_id = o.id
+       AND nus.menu_id = i.id
 ORDER BY
-  u.name,
-  m.sort_order,
-  m.id,
-  c.id,
-  i.sort_order,
-  i.id;
+    u.name,
+    o.sort_order,
+    o.id,
+    m.sort_order,
+    m.id,
+    c.id,
+    i.sort_order,
+    i.id;
 
 -- mx_system.nav_user_items_user_view
+-- Показує пункти для поточного дефолтного офісу:
+--   - явно призначені (nav_user_items) для цього офісу
+--   - АБО is_default = true — для всіх офісів користувача
 CREATE OR REPLACE VIEW mx_system.nav_user_items_user_view AS
-SELECT
-  u.id                         AS user_id,
-  m.id                         AS menu_id,
-  m.title                      AS menu_title,
-  m.sort_order                 AS menu_sort_order,
-  i.id                         AS item_id,
-  i.title                      AS item_title,
-  i.icon                       AS item_icon,
-  i.url                        AS item_url,
-  i.sort_order                 AS item_sort_order,
-  i.is_active                  AS item_is_active_global
+SELECT DISTINCT ON (u.id, i.id)
+    u.id                         AS user_id,
+    uo.office_id                 AS office_id,
+    m.id                         AS menu_id,
+    m.title                      AS menu_title,
+    m.sort_order                 AS menu_sort_order,
+    i.id                         AS item_id,
+    i.title                      AS item_title,
+    i.icon                       AS item_icon,
+    i.url                        AS item_url,
+    i.sort_order                 AS item_sort_order,
+    i.is_active                  AS item_is_active_global
 FROM
-  mx_system.nav_user_items nui
-  JOIN public."user" u
-    ON u.id = nui.user_id
-  JOIN mx_dic.menu_user_items i
-    ON i.id = nui.menu_id
-  JOIN mx_dic.menus m
-    ON m.id = i.menu_id
+    public."user" u
+    JOIN mx_system.user_offices uo
+        ON uo.user_id = u.id
+       AND uo.is_default = TRUE
+    CROSS JOIN mx_dic.menu_user_items i
+    JOIN mx_dic.menus m
+        ON m.id = i.menu_id
 WHERE
-  m.is_active = TRUE
-  AND i.is_active = TRUE
+    m.is_active = TRUE
+    AND i.is_active = TRUE
+    AND (
+        EXISTS (
+            SELECT 1 FROM mx_system.nav_user_items nui
+            WHERE nui.user_id = u.id
+              AND nui.menu_id = i.id
+              AND nui.office_id = uo.office_id
+        )
+        OR i.is_default = TRUE
+    )
 ORDER BY
-  u.id,
-  m.sort_order,
-  m.id,
-  i.sort_order,
-  i.id;
+    u.id,
+    i.id,
+    m.sort_order,
+    m.id,
+    i.sort_order;
 
 -- mx_system.nav_user_items_admin_view
+-- 3D-матриця: user × office × menu_item (для адмін-панелі)
 CREATE OR REPLACE VIEW mx_system.nav_user_items_admin_view AS
 SELECT
-  u.id                         AS user_id,
-  u.name                       AS user_name,
-  m.id                         AS menu_id,
-  m.title                      AS menu_title,
-  m.sort_order                 AS menu_sort_order,
-  i.id                         AS item_id,
-  i.title                      AS item_title,
-  i.icon                       AS item_icon,
-  i.url                        AS item_url,
-  i.sort_order                 AS item_sort_order,
-  i.is_active                  AS item_is_active_global,
-  (nui.id IS NOT NULL)         AS item_is_assigned,
-  (nui.id IS NOT NULL)
-    AND i.is_active
-    AND m.is_active            AS item_is_effective_active,
-  nui.id                       AS nav_user_item_id,
-  nui.created_at               AS created_at,
-  nui.created_by               AS created_by
+    u.id                         AS user_id,
+    u.name                       AS user_name,
+
+    o.id                         AS office_id,
+    o.title                      AS office_title,
+
+    m.id                         AS menu_id,
+    m.title                      AS menu_title,
+    m.sort_order                 AS menu_sort_order,
+
+    i.id                         AS item_id,
+    i.title                      AS item_title,
+    i.icon                       AS item_icon,
+    i.url                        AS item_url,
+    i.sort_order                 AS item_sort_order,
+    i.is_active                  AS item_is_active_global,
+
+    (nui.id IS NOT NULL)         AS item_is_assigned,
+    (nui.id IS NOT NULL)
+        AND i.is_active
+        AND m.is_active          AS item_is_effective_active,
+
+    nui.id                       AS nav_user_item_id,
+    nui.created_at               AS created_at,
+    nui.created_by               AS created_by
 FROM
-  public."user" u
-  CROSS JOIN mx_dic.menus m
-  JOIN mx_dic.menu_user_items i
-    ON i.menu_id = m.id
-  LEFT JOIN mx_system.nav_user_items nui
-    ON nui.user_id = u.id
-   AND nui.menu_id = i.id
+    public."user" u
+    CROSS JOIN mx_dic.offices o
+    CROSS JOIN mx_dic.menus m
+    JOIN mx_dic.menu_user_items i
+        ON i.menu_id = m.id
+    LEFT JOIN mx_system.nav_user_items nui
+        ON nui.user_id = u.id
+       AND nui.office_id = o.id
+       AND nui.menu_id = i.id
 ORDER BY
-  u.name,
-  m.sort_order,
-  m.id,
-  i.sort_order,
-  i.id;
+    u.name,
+    o.sort_order,
+    o.id,
+    m.sort_order,
+    m.id,
+    i.sort_order,
+    i.id;
+
+-- mx_system.nav_user_general_admin_view
+-- 2D-матриця: user × menu_general_items (для адмін-панелі)
+CREATE OR REPLACE VIEW mx_system.nav_user_general_admin_view AS
+SELECT
+    u.id                                    AS user_id,
+    u.name                                  AS user_name,
+
+    m.id                                    AS menu_id,
+    m.title                                 AS menu_title,
+    m.sort_order                            AS menu_sort_order,
+
+    i.id                                    AS item_id,
+    i.title                                 AS item_title,
+    i.icon                                  AS item_icon,
+    i.url                                   AS item_url,
+    i.sort_order                            AS item_sort_order,
+    i.is_active                             AS item_is_active_global,
+
+    (nug.id IS NOT NULL)                    AS item_is_assigned,
+    (nug.id IS NOT NULL)
+        AND i.is_active
+        AND m.is_active                     AS item_is_effective_active,
+
+    nug.id                                  AS nav_user_general_id,
+    nug.created_at                          AS created_at,
+    nug.created_by                          AS created_by
+FROM
+    public."user" u
+    CROSS JOIN mx_dic.menus m
+    JOIN mx_dic.menu_general_items i
+        ON i.menu_id = m.id
+    LEFT JOIN mx_system.nav_user_general nug
+        ON nug.user_id = u.id
+       AND nug.menu_id = i.id
+ORDER BY
+    u.name,
+    m.sort_order,
+    m.id,
+    i.sort_order,
+    i.id;
+
+-- mx_system.nav_user_general_user_view
+-- Пункти загального меню для сайдбару (без фільтрації за офісом):
+--   - явно призначені користувачу (nav_user_general)
+--   - АБО is_default = true — видно всім активним користувачам
+CREATE OR REPLACE VIEW mx_system.nav_user_general_user_view AS
+SELECT DISTINCT ON (u.id, i.id)
+    u.id                                    AS user_id,
+
+    m.id                                    AS menu_id,
+    m.title                                 AS menu_title,
+    m.sort_order                            AS menu_sort_order,
+
+    i.id                                    AS item_id,
+    i.title                                 AS item_title,
+    i.icon                                  AS item_icon,
+    i.url                                   AS item_url,
+    i.sort_order                            AS item_sort_order,
+    i.is_active                             AS item_is_active_global
+FROM
+    public."user" u
+    CROSS JOIN mx_dic.menu_general_items i
+    JOIN mx_dic.menus m
+        ON m.id = i.menu_id
+WHERE
+    m.is_active = TRUE
+    AND i.is_active = TRUE
+    AND (
+        EXISTS (
+            SELECT 1 FROM mx_system.nav_user_general nug
+            WHERE nug.user_id = u.id AND nug.menu_id = i.id
+        )
+        OR i.is_default = TRUE
+    )
+ORDER BY
+    u.id,
+    i.id,
+    m.sort_order,
+    m.id,
+    i.sort_order;
 
 -- mx_system.nav_user_permissions_admin_view
 CREATE OR REPLACE VIEW mx_system.nav_user_permissions_admin_view AS
@@ -1817,6 +2127,7 @@ SELECT
   (uo.id IS NOT NULL)                     AS office_is_assigned,
   (uo.id IS NOT NULL)
     AND o.is_active                       AS office_is_effective_active,
+  COALESCE(uo.is_default, FALSE)          AS office_is_default,
   uo.id                                   AS user_office_id,
   uo.created_at                           AS created_at,
   uo.created_by                           AS created_by
@@ -1840,7 +2151,8 @@ SELECT
   o.city                                  AS office_city,
   o.address                               AS office_address,
   o.phone                                 AS office_phone,
-  o.email                                 AS office_email
+  o.email                                 AS office_email,
+  uo.is_default                           AS office_is_default
 FROM
   mx_system.user_offices uo
   JOIN public."user" u
@@ -1850,6 +2162,46 @@ FROM
 WHERE
   o.is_active = TRUE
 ORDER BY
+  uo.is_default DESC,
   u.id,
   o.sort_order,
   o.id;
+
+-- mx_data.assignee_data_view
+CREATE OR REPLACE VIEW mx_data.assignee_data_view AS
+SELECT
+    ad.id                                                                   AS assignee_id,
+    ad.user_data_id,
+    ad.user_id,
+    ud.full_name,
+    ad.post_assignee_id,
+    dp.title                                                                AS post_assignee_title,
+    ad.description,
+    ad.updated_by,
+    ad.created_at,
+    ad.updated_at,
+    uc.contact_value,
+    dct.code                                                                AS contact_type_code,
+    uc.contact_type_id,
+    mx_data.fn_contact_build_url(dct.code, uc.contact_value)               AS contact_url,
+    u.name                                                                  AS user_name,
+    u.image                                                                 AS user_image,
+    u."isBanned"                                                            AS is_banned
+FROM mx_data.assignee_data ad
+    JOIN mx_data.user_data ud
+        ON ud.id = ad.user_data_id
+    JOIN mx_dic.dic_posts_assignee dp
+        ON dp.id = ad.post_assignee_id
+    LEFT JOIN LATERAL (
+        SELECT c.contact_value, c.contact_type_id
+        FROM mx_data.user_contact c
+        WHERE (ad.user_id IS NOT NULL AND c.user_id = ad.user_id)
+           OR (ad.user_id IS NULL AND c.user_data_id = ad.user_data_id)
+        ORDER BY c.is_default DESC, c.updated_at DESC
+        LIMIT 1
+    ) uc ON TRUE
+    LEFT JOIN mx_dic.dic_contact_type dct
+        ON dct.id = uc.contact_type_id
+    LEFT JOIN public."user" u
+        ON u.id = ad.user_id
+;

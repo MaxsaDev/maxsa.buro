@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 // Маршрути, які потребують аутентифікації
-const protectedRoutes = ['/dashboard', '/profile', '/mx-admin', '/onboarding'];
+const protectedRoutes = ['/mx-job', '/profile', '/mx-admin', '/onboarding'];
 
 /**
  * Proxy для базової перевірки авторизації
@@ -34,9 +34,9 @@ export function proxy(request: NextRequest) {
   }
 
   // ПРИМІТКА:
-  // - НЕ редиректимо з /login → /dashboard навіть якщо є cookie
+  // - НЕ редиректимо з /login → /mx-job навіть якщо є cookie
   // - Причина: cookie може бути невалідним після logout
-  // - Layout на /dashboard сам перенаправить на /login якщо сесія невалідна
+  // - Layout на /mx-job сам перенаправить на /login якщо сесія невалідна
   // - Перевірка ролі admin відбувається на самих сторінках (Server Components)
 
   return NextResponse.next();

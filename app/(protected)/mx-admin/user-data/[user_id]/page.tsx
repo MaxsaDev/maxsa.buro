@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { UserContactsView } from '@/components/mx-admin/user-contacts-view';
 import { UserDataView } from '@/components/mx-admin/user-data-view';
 import { UserDataTabs } from '@/components/mx-admin/user-data/user-data-tabs';
+import { UserGeneralMenu } from '@/components/mx-admin/user-data/user-general-menu';
 import { UserMenu } from '@/components/mx-admin/user-data/user-menu';
 import { UserOffices } from '@/components/mx-admin/user-data/user-offices';
 import { UserPermissions } from '@/components/mx-admin/user-data/user-permissions';
@@ -30,7 +31,7 @@ export default async function Page({ params }: Props) {
 
   // Перевірка ролі адміністратора
   if (user.role !== 'admin') {
-    redirect('/dashboard');
+    redirect('/mx-job');
   }
 
   // Отримуємо дані користувача
@@ -67,6 +68,7 @@ export default async function Page({ params }: Props) {
         }
         userOfficesContent={<UserOffices userId={user_id} />}
         userMenuContent={<UserMenu userId={user_id} />}
+        userGeneralMenuContent={<UserGeneralMenu userId={user_id} />}
         userPermissionsContent={<UserPermissions userId={user_id} />}
       />
     </div>

@@ -1,6 +1,7 @@
-import { SignupForm } from '@/components/auth/signup-form';
-import { Flower } from 'lucide-react';
 import Link from 'next/link';
+
+import { AppIcon } from '@/components/app-icon';
+import { SignupForm } from '@/components/auth/signup-form';
 
 export default function SignupPage() {
   return (
@@ -8,9 +9,9 @@ export default function SignupPage() {
       <div className="flex w-full max-w-sm flex-col gap-6">
         <Link href="/" className="flex items-center gap-2 self-center font-medium">
           <div className="bg-primary text-primary-foreground flex size-6 items-center justify-center rounded-md">
-            <Flower className="size-4" />
+            <AppIcon className="size-4" />
           </div>
-          Maxsa SP
+          Maxsa Buro
         </Link>
         <SignupForm />
       </div>

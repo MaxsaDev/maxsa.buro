@@ -1,7 +1,8 @@
-import { ArrowLeft, Flower } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Suspense } from 'react';
 
+import { AppIcon } from '@/components/app-icon';
 import { ResetPasswordForm } from '@/components/auth/reset-password-form';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -19,9 +20,9 @@ export default function ResetPasswordPage() {
           </Button>
           <Link href="/" className="flex items-center gap-2 font-medium">
             <div className="bg-primary text-primary-foreground flex size-6 items-center justify-center rounded-md">
-              <Flower className="size-4" />
+              <AppIcon className="size-4" />
             </div>
-            Maxsa SP
+            Maxsa Buro
           </Link>
         </div>
         <Suspense

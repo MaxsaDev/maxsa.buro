@@ -2,13 +2,18 @@ export interface NavUserSections {
   id: number;
   user_id: string;
   menu_id: number;
+  office_id: number;
   created_at: Date;
   created_by: string;
   is_auto_assigned: boolean;
 }
+
 export interface NavUserSectionsAdminView {
   user_id: string;
   user_name: string;
+
+  office_id: number;
+  office_title: string;
 
   menu_id: number;
   menu_title: string;
@@ -37,6 +42,7 @@ export interface NavUserSectionsAdminView {
 
 export interface NavUserSectionsUserView {
   user_id: string;
+  office_id: number;
 
   menu_id: number;
   menu_title: string;

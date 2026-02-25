@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## CRITICAL: Project Boundaries
+
+**This session's working directory is `/Users/maxsa/Work/maxsa.dev/maxsa.buro`.**
+
+- NEVER read, write, or copy files outside of this directory without explicit user confirmation.
+- NEVER edit files in sibling projects (`maxsa`, `maxsa-01`, etc.) even if context from a previous session referenced those paths.
+- Before any file write, verify the absolute path starts with `/Users/maxsa/Work/maxsa.dev/maxsa.buro/`.
+- If a summarized context contains paths from another project, treat them as reference only — re-implement changes locally in this project.
+
 ## Tech Stack
 
 - **Next.js 16** (App Router) with **React 19** and **React Compiler** (stable)
@@ -90,6 +99,74 @@ store/             Zustand stores (user-menu, user-permissions)
 - InputGroup buttons: `size="icon-xs" variant="ghost"` with semantic color classes.
 - Tabs: Card-based navigation (NOT Radix Tabs) for page-level navigation.
 - Cards: Colored borders for status (`border-success/30`, `border-warning/30`).
+
+## Database Management
+
+### SQL File Structure
+
+The `/sql` folder stores the **ideal, always up-to-date** database structure:
+
+```
+sql/
+  global-extention.sql         # PostgreSQL extensions
+  global-functions.sql         # Global shared functions
+  public/                      # Better Auth tables (user, session, etc.)
+  mx_dic/                      # Dictionary schema tables
+    table_name.sql             # Table + views (DROP TABLE → CREATE TABLE → DROP VIEW → CREATE VIEW)
+    table_name_fn.sql          # Functions & triggers for table_name (DROP → CREATE pattern)
+  mx_system/                   # System assignment tables
+    table_name.sql             # Same pattern
+  mx_data/                     # User data tables
+    table_name.sql             # Same pattern
+  migrations/
+    001_description.sql        # Sequential migration scripts (ALTER, DROP, recreate)
+    002_description.sql        # Each file is idempotent where possible
+    ...
+    README.md                  # Migration log with descriptions
+    clear_database_create_db_for_new_app.sql  # Full clean DB script (all tables in dependency order)
+```
+
+### SQL File Format
+
+Each `table_name.sql` follows this exact structure:
+
+```sql
+-- Description comment
+DROP TABLE IF EXISTS schema.table_name CASCADE;
+CREATE TABLE IF NOT EXISTS schema.table_name (...);
+-- indexes, constraints, comments
+
+DROP VIEW IF EXISTS schema.table_name_admin_view CASCADE;
+CREATE VIEW schema.table_name_admin_view AS ...;
+
+DROP VIEW IF EXISTS schema.table_name_user_view CASCADE;
+CREATE VIEW schema.table_name_user_view AS ...;
+```
+
+Each `table_name_fn.sql`:
+
+```sql
+-- Description
+DROP TRIGGER IF EXISTS ... ON ...;
+DROP FUNCTION IF EXISTS ...();
+CREATE OR REPLACE FUNCTION ...() ...;
+CREATE TRIGGER ...;
+```
+
+### When Making DB Changes
+
+**Always produce 3 artifacts:**
+
+1. **Canonical files** (`/sql/schema/table_name.sql`, `_fn.sql`) — update to reflect the new ideal structure
+2. **Migration file** (`/sql/migrations/NNN_description.sql`) — ALTER/DROP/recreate statements to transform an existing live DB. Numbered sequentially (007*, 008*, ...). For trigger-related changes: DROP trigger → ALTER table → recreate trigger.
+3. **`clear_database_create_db_for_new_app.sql`** — update to reflect the full new structure in chronological dependency order (extensions → schemas → tables → functions → triggers → views). This file allows creating a clean DB from scratch.
+
+Also update `migrations/README.md` with a description of the new migration.
+
+### View Naming Conventions
+
+- `*_admin_view` — full matrix (CROSS JOIN) for admin UI, shows all possible combinations with assignment status
+- `*_user_view` — filtered view for end-user display (only active + assigned records)
 
 ## Code Conventions
 

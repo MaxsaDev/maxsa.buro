@@ -1,0 +1,23 @@
+import { SVGProps } from 'react';
+
+interface AppIconProps extends SVGProps<SVGSVGElement> {
+  className?: string;
+}
+
+export const AppIcon = ({ className, ...props }: AppIconProps) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 1000 1000"
+    aria-hidden="true"
+    className={className}
+    {...props}
+  >
+    <circle fill="#231f20" cx="500" cy="500" r="500" />
+    <path
+      fill="#fff"
+      d="M425.3,811.85c-180.9-27.9-250.2-162.9-250.2-297,0-160.2,109.8-326.7,324.9-326.7s324.9,159.3,324.9,324.9c0,130.5-73.8,270-238.5,294.3v-155.7c54-21.6,88.2-74.7,88.2-144s-37.8-126-102.6-146.7v209.7h-135.9v-210.6c-70.2,20.7-110.7,73.8-110.7,147.6,0,67.5,33.3,125.1,99.9,146.7v157.5Z"
+    />
+  </svg>
+);
+
+AppIcon.displayName = 'AppIcon';

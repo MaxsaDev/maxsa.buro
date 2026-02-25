@@ -74,7 +74,7 @@ export function DynamicBreadcrumb({ appSupportMenu = [] }: DynamicBreadcrumbProp
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
-            <BreadcrumbLink href="/dashboard">Головна</BreadcrumbLink>
+            <BreadcrumbLink href="/mx-job">Головна</BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
@@ -85,13 +85,13 @@ export function DynamicBreadcrumb({ appSupportMenu = [] }: DynamicBreadcrumbProp
     );
   }
 
-  // Спеціальний випадок для Dashboard
-  if (pathname === '/dashboard') {
+  // Спеціальний випадок для робочого простору
+  if (pathname === '/mx-job') {
     return (
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
-            <BreadcrumbPage>Dashboard</BreadcrumbPage>
+            <BreadcrumbPage>Робочий простір</BreadcrumbPage>
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
@@ -104,7 +104,7 @@ export function DynamicBreadcrumb({ appSupportMenu = [] }: DynamicBreadcrumbProp
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
-            <BreadcrumbLink href="/dashboard">Головна</BreadcrumbLink>
+            <BreadcrumbLink href="/mx-job">Головна</BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
@@ -121,7 +121,7 @@ export function DynamicBreadcrumb({ appSupportMenu = [] }: DynamicBreadcrumbProp
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
-            <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
+            <BreadcrumbLink href="/mx-job">Робочий простір</BreadcrumbLink>
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
@@ -133,7 +133,7 @@ export function DynamicBreadcrumb({ appSupportMenu = [] }: DynamicBreadcrumbProp
     <Breadcrumb>
       <BreadcrumbList>
         <BreadcrumbItem>
-          <BreadcrumbLink href="/dashboard">Головна</BreadcrumbLink>
+          <BreadcrumbLink href="/mx-job">Головна</BreadcrumbLink>
         </BreadcrumbItem>
         {breadcrumbInfo.parent && (
           <>

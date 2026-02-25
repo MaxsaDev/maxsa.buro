@@ -2,12 +2,14 @@
 
 import { Command } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import * as React from 'react';
 
 import { NavItems } from '@/components/nav-items';
 import { NavSecondary } from '@/components/nav-secondary';
 import { NavSections } from '@/components/nav-sections';
 import { NavUser } from '@/components/nav-user';
+import { OfficeSwitcher } from '@/components/office-switcher';
 import {
   Sidebar,
   SidebarContent,
@@ -19,9 +21,10 @@ import {
 } from '@/components/ui/sidebar';
 import type { LucideIcon } from 'lucide-react';
 
+import type { UserOfficeUserView } from '@/interfaces/mx-system/user-offices';
 import { data } from '@/lib';
-import { buildAvatarUrl } from '@/lib/avatar/build-avatar-url';
 import type { ExtendedUser } from '@/lib/auth/auth-types';
+import { buildAvatarUrl } from '@/lib/avatar/build-avatar-url';
 import { getMenuIcon } from '@/lib/icon/get-menu-icon';
 import { useUserMenuStore } from '@/store/user-menu/user-menu-store';
 
@@ -33,46 +36,73 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
     url: string;
     icon: string;
   }>;
+  userOffices: UserOfficeUserView[];
 }
 
-export function AppSidebar({ user, appSupportMenu, ...props }: AppSidebarProps) {
+export function AppSidebar({ user, appSupportMenu, userOffices, ...props }: AppSidebarProps) {
   // Визначаємо, чи є користувач адміністратором
   const isAdmin = user.role === 'admin';
+
+  // Визначаємо, чи знаходимось на адміністративній сторінці
+  const pathname = usePathname();
+  const isAdminRoute = pathname.startsWith('/mx-admin');
 
   // Завжди використовуємо меню з Zustand store (користувацьке меню з БД)
   const storeSections = useUserMenuStore((state) => state.sections);
   const storeItems = useUserMenuStore((state) => state.items);
+  const storeGeneralItems = useUserMenuStore((state) => state.generalItems);
 
   const appSupportWithIcons = appSupportMenu.map((item) => ({
     ...item,
     icon: getMenuIcon(item.icon) as LucideIcon,
   }));
 
-  const userProfileWithIcons = data.navUserProfile.map((item) => ({
-    ...item,
+  const userProfileWithIcons = [
+    ...(isAdmin
+      ? [{ ...data.navUserAdmin, icon: getMenuIcon(data.navUserAdmin.icon) as LucideIcon }]
+      : []),
+    ...data.navUserProfile.map((item) => ({
+      ...item,
+      icon: getMenuIcon(item.icon) as LucideIcon,
+    })),
+  ];
+
+  const registeredNavigationItems = (
+    isAdmin
+      ? isAdminRoute
+        ? data.navRegisteredAdminMxAdmin
+        : data.navRegisteredAdminMxJob
+      : data.navRegisteredUserMxJob
+  ).map((item) => ({
+    name: item.title,
+    url: item.url,
     icon: getMenuIcon(item.icon) as LucideIcon,
   }));
 
   return (
     <Sidebar variant="inset" {...props}>
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link href="/dashboard">
-                <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                  <Command className="size-4" />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">MAXSA SP</span>
-                  <span className="truncate text-xs">
-                    {isAdmin ? 'Адміністратор' : 'Enterprise'}
-                  </span>
-                </div>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        {!isAdminRoute && userOffices.length > 0 ? (
+          <OfficeSwitcher offices={userOffices} />
+        ) : (
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton size="lg" asChild>
+                <Link href="/mx-job">
+                  <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
+                    <Command className="size-4" />
+                  </div>
+                  <div className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-semibold">MAXSA BURO</span>
+                    <span className="truncate text-xs">
+                      {isAdmin ? 'Адміністратор' : 'Enterprise'}
+                    </span>
+                  </div>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        )}
       </SidebarHeader>
       <SidebarContent>
         {/* ============================================ */}
@@ -80,88 +110,133 @@ export function AppSidebar({ user, appSupportMenu, ...props }: AppSidebarProps) 
         {/* ============================================ */}
 
         {/* Користувацьке меню з секціями - групуємо по меню */}
-        {(() => {
-          // Групуємо секції по меню
-          const sectionsByMenu = new Map<
-            number,
-            { menuTitle: string; menuSortOrder: number; sections: typeof storeSections }
-          >();
+        {/* Приховуємо коли адмін знаходиться в адмін-просторі */}
+        {!(isAdmin && isAdminRoute) &&
+          (() => {
+            // Групуємо секції по меню
+            const sectionsByMenu = new Map<
+              number,
+              { menuTitle: string; menuSortOrder: number; sections: typeof storeSections }
+            >();
 
-          for (const section of storeSections) {
-            if (!sectionsByMenu.has(section.menuId)) {
-              sectionsByMenu.set(section.menuId, {
-                menuTitle: section.menuTitle,
-                menuSortOrder: section.menuSortOrder,
-                sections: [],
-              });
+            for (const section of storeSections) {
+              if (!sectionsByMenu.has(section.menuId)) {
+                sectionsByMenu.set(section.menuId, {
+                  menuTitle: section.menuTitle,
+                  menuSortOrder: section.menuSortOrder,
+                  sections: [],
+                });
+              }
+              sectionsByMenu.get(section.menuId)!.sections.push(section);
             }
-            sectionsByMenu.get(section.menuId)!.sections.push(section);
-          }
 
-          // Сортуємо меню по sort_order
-          const sortedMenus = Array.from(sectionsByMenu.entries()).sort(
-            (a, b) => a[1].menuSortOrder - b[1].menuSortOrder
-          );
+            // Сортуємо меню по sort_order
+            const sortedMenus = Array.from(sectionsByMenu.entries()).sort(
+              (a, b) => a[1].menuSortOrder - b[1].menuSortOrder
+            );
 
-          return sortedMenus.map(([menuId, { menuTitle, sections }]) => (
-            <NavSections
-              key={menuId}
-              items={sections.map((section) => ({
-                ...section,
-                icon: getMenuIcon(section.icon) as LucideIcon,
-                items: section.items?.map((item) => ({
-                  ...item,
-                  icon: item.icon ? (getMenuIcon(item.icon) as LucideIcon) : undefined,
-                })),
-              }))}
-              label={menuTitle}
-            />
-          ));
-        })()}
+            return sortedMenus.map(([menuId, { menuTitle, sections }]) => (
+              <NavSections
+                key={menuId}
+                items={sections.map((section) => ({
+                  ...section,
+                  icon: getMenuIcon(section.icon) as LucideIcon,
+                  items: section.items?.map((item) => ({
+                    ...item,
+                    icon: item.icon ? (getMenuIcon(item.icon) as LucideIcon) : undefined,
+                  })),
+                }))}
+                label={menuTitle}
+              />
+            ));
+          })()}
 
         {/* Прості пункти меню користувача (без підменю) - групуємо по меню */}
-        {(() => {
-          // Групуємо пункти по меню
-          const itemsByMenu = new Map<
-            number,
-            { menuTitle: string; menuSortOrder: number; items: typeof storeItems }
-          >();
+        {/* Приховуємо коли адмін знаходиться в адмін-просторі */}
+        {!(isAdmin && isAdminRoute) &&
+          (() => {
+            // Групуємо пункти по меню
+            const itemsByMenu = new Map<
+              number,
+              { menuTitle: string; menuSortOrder: number; items: typeof storeItems }
+            >();
 
-          for (const item of storeItems) {
-            if (!itemsByMenu.has(item.menuId)) {
-              itemsByMenu.set(item.menuId, {
-                menuTitle: item.menuTitle,
-                menuSortOrder: item.menuSortOrder,
-                items: [],
-              });
+            for (const item of storeItems) {
+              if (!itemsByMenu.has(item.menuId)) {
+                itemsByMenu.set(item.menuId, {
+                  menuTitle: item.menuTitle,
+                  menuSortOrder: item.menuSortOrder,
+                  items: [],
+                });
+              }
+              itemsByMenu.get(item.menuId)!.items.push(item);
             }
-            itemsByMenu.get(item.menuId)!.items.push(item);
-          }
 
-          // Сортуємо меню по sort_order
-          const sortedMenus = Array.from(itemsByMenu.entries()).sort(
-            (a, b) => a[1].menuSortOrder - b[1].menuSortOrder
-          );
+            // Сортуємо меню по sort_order
+            const sortedMenus = Array.from(itemsByMenu.entries()).sort(
+              (a, b) => a[1].menuSortOrder - b[1].menuSortOrder
+            );
 
-          return sortedMenus.map(([menuId, { menuTitle, items }]) => (
-            <NavItems
-              key={menuId}
-              items={items.map((item) => ({
-                name: item.name,
-                url: item.url,
-                icon: getMenuIcon(item.icon) as LucideIcon,
-              }))}
-              label={menuTitle}
-            />
-          ));
-        })()}
+            return sortedMenus.map(([menuId, { menuTitle, items }]) => (
+              <NavItems
+                key={menuId}
+                items={items.map((item) => ({
+                  name: item.name,
+                  url: item.url,
+                  icon: getMenuIcon(item.icon) as LucideIcon,
+                }))}
+                label={menuTitle}
+              />
+            ));
+          })()}
+
+        {/* ============================================ */}
+        {/* ЗАГАЛЬНЕ МЕНЮ (завжди видно, незалежно від офісу) */}
+        {/* ============================================ */}
+        {!(isAdmin && isAdminRoute) &&
+          storeGeneralItems.length > 0 &&
+          (() => {
+            // Групуємо загальні пункти по меню
+            const generalByMenu = new Map<
+              number,
+              { menuTitle: string; menuSortOrder: number; items: typeof storeGeneralItems }
+            >();
+
+            for (const item of storeGeneralItems) {
+              if (!generalByMenu.has(item.menuId)) {
+                generalByMenu.set(item.menuId, {
+                  menuTitle: item.menuTitle,
+                  menuSortOrder: item.menuSortOrder,
+                  items: [],
+                });
+              }
+              generalByMenu.get(item.menuId)!.items.push(item);
+            }
+
+            // Сортуємо меню по sort_order
+            const sortedMenus = Array.from(generalByMenu.entries()).sort(
+              (a, b) => a[1].menuSortOrder - b[1].menuSortOrder
+            );
+
+            return sortedMenus.map(([menuId, { menuTitle, items }]) => (
+              <NavItems
+                key={`general-${menuId}`}
+                items={items.map((item) => ({
+                  name: item.name,
+                  url: item.url,
+                  icon: getMenuIcon(item.icon) as LucideIcon,
+                }))}
+                label={menuTitle}
+              />
+            ));
+          })()}
 
         {/* ============================================ */}
         {/* АДМІНСЬКЕ МЕНЮ (тільки для адміністраторів, знизу) */}
         {/* ============================================ */}
 
-        {/* Адмінське меню з секціями */}
-        {isAdmin && data.navAdminSections.length > 0 && (
+        {/* Адмінське меню з секціями — тільки в адмін-просторі */}
+        {isAdmin && isAdminRoute && data.navAdminSections.length > 0 && (
           <NavSections
             items={data.navAdminSections.map((section) => ({
               ...section,
@@ -175,8 +250,8 @@ export function AppSidebar({ user, appSupportMenu, ...props }: AppSidebarProps) 
           />
         )}
 
-        {/* Адмінські пункти меню (без підменю) */}
-        {isAdmin && data.navAdminItems.length > 0 && (
+        {/* Адмінські пункти меню (без підменю) — тільки в адмін-просторі */}
+        {isAdmin && isAdminRoute && data.navAdminItems.length > 0 && (
           <NavItems
             items={data.navAdminItems.map((item) => ({
               name: item.name,
@@ -194,6 +269,20 @@ export function AppSidebar({ user, appSupportMenu, ...props }: AppSidebarProps) 
         )}
       </SidebarContent>
       <SidebarFooter>
+        {registeredNavigationItems.length > 0 && (
+          <SidebarMenu>
+            {registeredNavigationItems.map((item) => (
+              <SidebarMenuItem key={item.name}>
+                <SidebarMenuButton asChild>
+                  <Link href={item.url}>
+                    <item.icon />
+                    <span>{item.name}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        )}
         <NavUser
           user={{
             name: user.name,

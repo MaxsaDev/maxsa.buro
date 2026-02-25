@@ -63,29 +63,83 @@ export const menuAdmin = {
   ],
 
   // Меню адміністратора з загальними пунктами
-  navAdminItems: [
-    {
-      id: 2101,
-      name: 'Адмін пункт 1',
-      url: '#',
-      icon: 'Shield',
-    },
-    {
-      id: 2102,
-      name: 'Адмін пункт 2',
-      url: '#',
-      icon: 'Shield',
-    },
-    {
-      id: 2103,
-      name: 'Адмін пункт 3',
-      url: '#',
-      icon: 'Shield',
-    },
-  ],
+  navAdminItems: [] as Array<{
+    id: number;
+    name: string;
+    url: string;
+    icon: string;
+  }>,
+  // {
+  //   id: 2101,
+  //   name: 'Адмін пункт 1',
+  //   url: '#',
+  //   icon: 'Shield',
+  // },
+  // {
+  //   id: 2102,
+  //   name: 'Адмін пункт 2',
+  //   url: '#',
+  //   icon: 'Shield',
+  // },
+  // {
+  //   id: 2103,
+  //   name: 'Адмін пункт 3',
+  //   url: '#',
+  //   icon: 'Shield',
+  // },
 };
 
 export const menuUser = {
+  // Основна навігація для зареєстрованого адміністратора в просторі /mx-job
+  navRegisteredAdminMxJob: [
+    {
+      id: 6201,
+      title: 'Головна',
+      url: '/',
+      icon: 'Home',
+    },
+    {
+      id: 6202,
+      title: 'Адміністратор',
+      url: '/mx-admin',
+      icon: 'Shield',
+    },
+  ],
+
+  // Основна навігація для зареєстрованого адміністратора в просторі /mx-admin
+  navRegisteredAdminMxAdmin: [
+    {
+      id: 6203,
+      title: 'Головна',
+      url: '/',
+      icon: 'Home',
+    },
+    {
+      id: 6204,
+      title: 'Робоча панель',
+      url: '/mx-job',
+      icon: 'LayoutDashboard',
+    },
+  ],
+
+  // Основна навігація для зареєстрованого користувача в просторі /mx-job
+  navRegisteredUserMxJob: [
+    {
+      id: 6205,
+      title: 'Головна',
+      url: '/',
+      icon: 'Home',
+    },
+  ],
+
+  // Пункт адмін-панелі для персонального меню (тільки для адміністраторів)
+  navUserAdmin: {
+    id: 6100,
+    title: 'Управління',
+    url: '/mx-admin',
+    icon: 'LayoutDashboard',
+  },
+
   // Меню користувача з профілем та налаштуваннями
   navUserProfile: [
     {

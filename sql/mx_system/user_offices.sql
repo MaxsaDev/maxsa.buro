@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS mx_system.user_offices
     id         SERIAL      PRIMARY KEY,     -- технічний ідентифікатор запису
     user_id    text        NOT NULL,        -- ідентифікатор користувача (з Better Auth, тип text)
     office_id  int         NOT NULL,        -- FK на офіс (mx_dic.offices.id)
+    is_default boolean     NOT NULL DEFAULT FALSE, -- офіс за замовчуванням для користувача
     created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP, -- дата/час призначення
     created_by text        NOT NULL,        -- хто призначив (id користувача-адміністратора)
 
@@ -60,6 +61,7 @@ SELECT
     (uo.id IS NOT NULL)                     AS office_is_assigned,    -- чи є запис у user_offices
     (uo.id IS NOT NULL)
         AND o.is_active                     AS office_is_effective_active, -- фактична активність з урахуванням глобального прапора
+    COALESCE(uo.is_default, FALSE)          AS office_is_default,     -- чи є офіс за замовчуванням
 
     -- Метадані призначення
     uo.id                                   AS user_office_id,        -- id запису про призначення
@@ -97,7 +99,8 @@ SELECT
     o.city                                  AS office_city,           -- місто офісу
     o.address                               AS office_address,        -- адреса офісу
     o.phone                                 AS office_phone,          -- телефон офісу
-    o.email                                 AS office_email           -- електронна пошта офісу
+    o.email                                 AS office_email,          -- електронна пошта офісу
+    uo.is_default                           AS office_is_default      -- чи є офіс за замовчуванням
 FROM
     mx_system.user_offices uo
     JOIN public."user" u
@@ -108,6 +111,7 @@ WHERE
     -- офіс має бути активним
     o.is_active = TRUE
 ORDER BY
+    uo.is_default DESC,
     u.id,
     o.sort_order,
     o.id;

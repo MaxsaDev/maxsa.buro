@@ -7,6 +7,8 @@ import {
   updateOfficeCity,
   updateOfficeEmail,
   updateOfficeLinkMap,
+  updateOfficeLatitude,
+  updateOfficeLongitude,
   updateOfficePhone,
   updateOfficeTitle,
   updateOfficeZip,
@@ -15,6 +17,8 @@ import type { ActionStatus } from '@/interfaces/action-status';
 import { getCurrentUser } from '@/lib/auth/auth-server';
 import {
   officeEmailSchema,
+  officeLatitudeSchema,
+  officeLongitudeSchema,
   officePhoneSchema,
   officeTextFieldSchema,
   officeTitleSchema,
@@ -29,6 +33,8 @@ const fieldMap = {
   email: { update: updateOfficeEmail, schema: officeEmailSchema },
   link_map: { update: updateOfficeLinkMap, schema: officeTextFieldSchema },
   zip: { update: updateOfficeZip, schema: officeTextFieldSchema },
+  latitude: { update: updateOfficeLatitude, schema: officeLatitudeSchema },
+  longitude: { update: updateOfficeLongitude, schema: officeLongitudeSchema },
 } as const;
 
 type OfficeField = keyof typeof fieldMap;

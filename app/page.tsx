@@ -1,5 +1,6 @@
-import { Flower } from 'lucide-react';
 import Link from 'next/link';
+
+import { AppIcon } from '@/components/app-icon';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,9 +12,9 @@ export default function HomePage() {
         {/* Лого */}
         <div className="flex items-center justify-center gap-2 font-medium">
           <div className="bg-primary text-primary-foreground flex h-8 w-8 items-center justify-center rounded-md">
-            <Flower className="size-5" />
+            <AppIcon className="size-5" />
           </div>
-          <span className="text-2xl font-semibold">Maxsa SP</span>
+          <span className="text-2xl font-semibold">Maxsa Buro</span>
         </div>
 
         {/* Картка з кнопками навігації */}
@@ -48,7 +49,7 @@ export default function HomePage() {
                 <h3 className="text-sm font-medium">Захищені сторінки</h3>
                 <div className="grid gap-2">
                   <Button asChild className="justify-start">
-                    <Link href="/dashboard">Dashboard (користувач)</Link>
+                    <Link href="/mx-job">Робочий простір (користувач)</Link>
                   </Button>
                   <Button asChild className="justify-start">
                     <Link href="/profile">Профіль користувача</Link>

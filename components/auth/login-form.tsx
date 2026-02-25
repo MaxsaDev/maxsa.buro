@@ -146,7 +146,7 @@ export function LoginForm({ className, ...props }: ComponentPropsWithoutRef<'div
 
         if (data) {
           toast.success('Вхід успішний!');
-          router.push('/dashboard');
+          router.push('/mx-job');
         }
       } catch (error) {
         console.error('[2FA Verify TOTP] Error:', error);
@@ -180,7 +180,7 @@ export function LoginForm({ className, ...props }: ComponentPropsWithoutRef<'div
 
         if (data) {
           toast.success('Вхід успішний!');
-          router.push('/dashboard');
+          router.push('/mx-job');
         }
       } catch (error) {
         console.error('[2FA Verify Backup] Error:', error);
@@ -197,7 +197,7 @@ export function LoginForm({ className, ...props }: ComponentPropsWithoutRef<'div
     try {
       await authClient.signIn.social({
         provider: 'google',
-        callbackURL: '/dashboard',
+        callbackURL: '/mx-job',
       });
     } catch (error) {
       console.error('[Google OAuth] Помилка:', error);

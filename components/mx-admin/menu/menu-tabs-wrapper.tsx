@@ -1,13 +1,15 @@
 'use client';
 
-import { FolderTree, Layers, LifeBuoy } from 'lucide-react';
+import { FolderTree, Globe2, Layers, LifeBuoy } from 'lucide-react';
 import { useState } from 'react';
 
 import { MenuAppSupport } from './menu-app-support';
+import { MenuGeneral } from './menu-general';
 import { MenuUserItems } from './menu-user-items';
 import { MenuUserSections } from './menu-user-sections';
 
 import type { MenuAppSupport as MenuAppSupportType } from '@/interfaces/mx-dic/menu-app-support';
+import type { MenuGeneralItems } from '@/interfaces/mx-dic/menu-general-items';
 import type { MenuUserItems as MenuUserItemsType } from '@/interfaces/mx-dic/menu-user-items';
 import type {
   MenuUserSectionsCategory,
@@ -15,7 +17,7 @@ import type {
 } from '@/interfaces/mx-dic/menu-user-sections';
 import type { Menu } from '@/interfaces/mx-dic/menus';
 
-type TabId = 'user-sections' | 'user-items' | 'app-support';
+type TabId = 'user-sections' | 'user-items' | 'general' | 'app-support';
 
 const tabs: Array<{ id: TabId; label: string; description: string; icon: typeof FolderTree }> = [
   {
@@ -31,6 +33,12 @@ const tabs: Array<{ id: TabId; label: string; description: string; icon: typeof 
     icon: Layers,
   },
   {
+    id: 'general',
+    label: 'Загальне',
+    description: 'Загальне меню',
+    icon: Globe2,
+  },
+  {
     id: 'app-support',
     label: 'Підтримка',
     description: 'Меню підтримки',
@@ -41,25 +49,31 @@ const tabs: Array<{ id: TabId; label: string; description: string; icon: typeof 
 interface MenuTabsWrapperProps {
   menusSections: Menu[];
   menusItems: Menu[];
+  menusGeneral: Menu[];
   appSupportMenuId: number;
   sectionsMenuTypeId: number;
   itemsMenuTypeId: number;
+  generalMenuTypeId: number;
   categories: MenuUserSectionsCategory[];
   sectionsItems: MenuUserSectionsItems[];
   userItems: MenuUserItemsType[];
   appSupport: MenuAppSupportType[];
+  generalItems: MenuGeneralItems[];
 }
 
 export function MenuTabsWrapper({
   menusSections,
   menusItems,
+  menusGeneral,
   appSupportMenuId,
   sectionsMenuTypeId,
   itemsMenuTypeId,
+  generalMenuTypeId,
   categories,
   sectionsItems,
   userItems,
   appSupport,
+  generalItems,
 }: MenuTabsWrapperProps) {
   const [activeTab, setActiveTab] = useState<TabId>('user-sections');
 
@@ -118,6 +132,10 @@ export function MenuTabsWrapper({
 
         {activeTab === 'user-items' && (
           <MenuUserItems menus={menusItems} menuTypeId={itemsMenuTypeId} items={userItems} />
+        )}
+
+        {activeTab === 'general' && (
+          <MenuGeneral menus={menusGeneral} menuTypeId={generalMenuTypeId} items={generalItems} />
         )}
 
         {activeTab === 'app-support' && (

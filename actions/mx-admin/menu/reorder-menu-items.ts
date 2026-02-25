@@ -38,6 +38,35 @@ export async function reorderMenuUserSectionsItems(
 }
 
 /**
+ * Оновити порядок пунктів загального меню
+ */
+export async function reorderMenuGeneralItems(
+  items: ReorderItem[]
+): Promise<{ success: boolean; message: string }> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    for (const item of items) {
+      await client.query('UPDATE mx_dic.menu_general_items SET sort_order = $1 WHERE id = $2', [
+        item.sort_order,
+        item.id,
+      ]);
+    }
+
+    await client.query('COMMIT');
+    revalidatePath('/mx-admin/menu-app');
+    return { success: true, message: 'Порядок пунктів загального меню успішно оновлено' };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('[reorderMenuGeneralItems] Помилка оновлення порядку:', error);
+    throw new Error('Не вдалося оновити порядок пунктів загального меню');
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Оновити порядок пунктів меню користувача (без секцій)
  */
 export async function reorderMenuUserItems(

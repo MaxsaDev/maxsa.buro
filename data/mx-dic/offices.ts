@@ -176,6 +176,40 @@ export async function updateOfficeZip(id: number, zip: string): Promise<void> {
 }
 
 /**
+ * Оновити широту офісу
+ */
+export async function updateOfficeLatitude(id: number, latitude: string): Promise<void> {
+  try {
+    const sql = `
+      UPDATE mx_dic.offices
+      SET latitude = $1::NUMERIC(10,7), updated_at = now()
+      WHERE id = $2
+    `;
+    await pool.query(sql, [latitude || null, id]);
+  } catch (error) {
+    console.error('[updateOfficeLatitude] Помилка оновлення широти офісу:', error);
+    throw new Error('Не вдалося оновити широту офісу');
+  }
+}
+
+/**
+ * Оновити довготу офісу
+ */
+export async function updateOfficeLongitude(id: number, longitude: string): Promise<void> {
+  try {
+    const sql = `
+      UPDATE mx_dic.offices
+      SET longitude = $1::NUMERIC(10,7), updated_at = now()
+      WHERE id = $2
+    `;
+    await pool.query(sql, [longitude || null, id]);
+  } catch (error) {
+    console.error('[updateOfficeLongitude] Помилка оновлення довготи офісу:', error);
+    throw new Error('Не вдалося оновити довготу офісу');
+  }
+}
+
+/**
  * Оновити активність офісу
  */
 export async function updateOfficeActive(id: number, isActive: boolean): Promise<void> {

@@ -106,6 +106,7 @@ EXECUTE FUNCTION mx_data.fn_user_contact_bi_validate();
 
 -- ======================================================
 -- ПІДТРИМКА «РІВНО ОДИН ДЕФОЛТНИЙ» КОНТАКТ
+-- Підтримує user_id (зареєстровані) і user_data_id (клієнти без акаунту)
 -- ======================================================
 
 -- BEFORE UPDATE: знімаємо is_default з інших контактів ДО перевірки unique index
@@ -117,17 +118,19 @@ AS $$
 /*
   ОПИС (UA):
   BEFORE UPDATE: якщо встановлюємо is_default=TRUE, спочатку знімаємо прапор з усіх інших контактів.
-  Це уникає конфлікту з unique index user_contact_default_one_per_user_idx.
-  updated_at встановлюється автоматично через триггер trg_user_contact_bu_set_updated_at.
+  Підтримує user_id і user_data_id.
 */
 BEGIN
-  -- Якщо встановлюємо is_default=TRUE (і це зміна)
   IF NEW.is_default AND (OLD.is_default IS DISTINCT FROM NEW.is_default) THEN
-    -- Знімаємо is_default з усіх інших контактів цього користувача
-    -- updated_at оновиться автоматично через окремий триггер
-    UPDATE mx_data.user_contact
-    SET is_default = FALSE
-    WHERE user_id = NEW.user_id AND id <> NEW.id AND is_default = TRUE;
+    IF NEW.user_id IS NOT NULL THEN
+      UPDATE mx_data.user_contact
+      SET is_default = FALSE
+      WHERE user_id = NEW.user_id AND id <> NEW.id AND is_default = TRUE;
+    ELSIF NEW.user_data_id IS NOT NULL THEN
+      UPDATE mx_data.user_contact
+      SET is_default = FALSE
+      WHERE user_data_id = NEW.user_data_id AND id <> NEW.id AND is_default = TRUE;
+    END IF;
   END IF;
 
   RETURN NEW;
@@ -148,12 +151,12 @@ LANGUAGE plpgsql
 AS $$
 /*
   ОПИС (UA):
-  AFTER INSERT/DELETE підтримує узгодженість is_default для кожного user_id:
+  AFTER INSERT/DELETE підтримує узгодженість is_default для кожного власника:
   - перший контакт → дефолтний;
   - якщо вставлений контакт дефолтний → скинути іншим;
   - при видаленні дефолтного → найсвіжіший стає дефолтним.
   Рекурсія відсічена через pg_trigger_depth().
-  updated_at встановлюється автоматично через триггер trg_user_contact_bu_set_updated_at.
+  Підтримує user_id (зареєстровані) і user_data_id (клієнти без акаунту).
 */
 DECLARE
   v_has_others boolean;
@@ -164,40 +167,66 @@ BEGIN
   END IF;
 
   IF TG_OP = 'INSERT' THEN
-    -- перший контакт користувача → зробити дефолтним
-    IF NOT EXISTS (SELECT 1 FROM mx_data.user_contact WHERE user_id = NEW.user_id AND id <> NEW.id) THEN
-      IF NEW.is_default IS FALSE THEN
-        UPDATE mx_data.user_contact
-        SET is_default = TRUE
-        WHERE id = NEW.id;
+    IF NEW.user_id IS NOT NULL THEN
+      -- Зареєстрований: перший контакт → дефолтний
+      IF NOT EXISTS (SELECT 1 FROM mx_data.user_contact WHERE user_id = NEW.user_id AND id <> NEW.id) THEN
+        IF NEW.is_default IS FALSE THEN
+          UPDATE mx_data.user_contact SET is_default = TRUE WHERE id = NEW.id;
+        END IF;
       END IF;
-    END IF;
 
-    -- якщо вставлений контакт дефолтний → скинути іншим
-    IF NEW.is_default THEN
-      UPDATE mx_data.user_contact
-      SET is_default = FALSE
-      WHERE user_id = NEW.user_id AND id <> NEW.id AND is_default IS TRUE;
+      IF NEW.is_default THEN
+        UPDATE mx_data.user_contact
+        SET is_default = FALSE
+        WHERE user_id = NEW.user_id AND id <> NEW.id AND is_default IS TRUE;
+      END IF;
+
+    ELSIF NEW.user_data_id IS NOT NULL THEN
+      -- Клієнт без акаунту: перший контакт → дефолтний
+      IF NOT EXISTS (SELECT 1 FROM mx_data.user_contact WHERE user_data_id = NEW.user_data_id AND id <> NEW.id) THEN
+        IF NEW.is_default IS FALSE THEN
+          UPDATE mx_data.user_contact SET is_default = TRUE WHERE id = NEW.id;
+        END IF;
+      END IF;
+
+      IF NEW.is_default THEN
+        UPDATE mx_data.user_contact
+        SET is_default = FALSE
+        WHERE user_data_id = NEW.user_data_id AND id <> NEW.id AND is_default IS TRUE;
+      END IF;
     END IF;
 
     RETURN NEW;
 
   ELSIF TG_OP = 'DELETE' THEN
     IF OLD.is_default THEN
-      SELECT EXISTS (SELECT 1 FROM mx_data.user_contact WHERE user_id = OLD.user_id)
-      INTO v_has_others;
+      IF OLD.user_id IS NOT NULL THEN
+        SELECT EXISTS (SELECT 1 FROM mx_data.user_contact WHERE user_id = OLD.user_id)
+        INTO v_has_others;
 
-      IF v_has_others THEN
-        SELECT id
-        INTO v_new_id
-        FROM mx_data.user_contact
-        WHERE user_id = OLD.user_id
-        ORDER BY is_default DESC, updated_at DESC
-        LIMIT 1;
+        IF v_has_others THEN
+          SELECT id INTO v_new_id
+          FROM mx_data.user_contact
+          WHERE user_id = OLD.user_id
+          ORDER BY is_default DESC, updated_at DESC
+          LIMIT 1;
 
-        UPDATE mx_data.user_contact
-        SET is_default = TRUE
-        WHERE id = v_new_id;
+          UPDATE mx_data.user_contact SET is_default = TRUE WHERE id = v_new_id;
+        END IF;
+
+      ELSIF OLD.user_data_id IS NOT NULL THEN
+        SELECT EXISTS (SELECT 1 FROM mx_data.user_contact WHERE user_data_id = OLD.user_data_id)
+        INTO v_has_others;
+
+        IF v_has_others THEN
+          SELECT id INTO v_new_id
+          FROM mx_data.user_contact
+          WHERE user_data_id = OLD.user_data_id
+          ORDER BY is_default DESC, updated_at DESC
+          LIMIT 1;
+
+          UPDATE mx_data.user_contact SET is_default = TRUE WHERE id = v_new_id;
+        END IF;
       END IF;
     END IF;
 

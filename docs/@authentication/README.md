@@ -75,12 +75,12 @@ import { nextCookies } from 'better-auth/next-js';
 
 plugins: [
   passkey({
-    rpName: 'Maxsa SP',
+    rpName: 'Maxsa Buro',
     rpID: 'localhost', // production: maxsa.dev
     origin: 'http://localhost:3000',
   }),
   twoFactor({
-    issuer: 'Maxsa SP',
+    issuer: 'Maxsa Buro',
   }),
   nextCookies(), // ВАЖЛИВО: має бути останнім!
 ];

@@ -89,13 +89,13 @@ export function PasskeyLogin({ email: _email, onSuccess }: PasskeyLoginProps) {
       // Викликаємо callback якщо переданий
       onSuccess?.();
 
-      // Редіректимо на dashboard після появи сесії
+      // Редіректимо на mx-job після появи сесії
       const hasSession = await waitForSession();
       if (hasSession) {
-        router.replace('/dashboard');
+        router.replace('/mx-job');
         router.refresh();
       } else {
-        window.location.assign('/dashboard');
+        window.location.assign('/mx-job');
       }
     } catch (error: unknown) {
       // Неочікувана помилка - показуємо загальне повідомлення

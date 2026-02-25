@@ -1,486 +1,346 @@
-# Система меню приложения
+# Система меню
 
 ## Огляд
 
 Система меню дозволяє адміністратору створювати та керувати множиною меню різних типів для користувачів. Кожне меню має власну назву, тип, порядок відображення та може містити секції з пунктами або просто пункти.
 
-### Ключові можливості
-
-- **Множинні меню**: Адміністратор може створювати необмежену кількість меню різних типів
-- **Меню за замовчуванням**: Автоматичне призначення меню новим та існуючим користувачам через `is_default`
-- **Автоматичне видалення**: При знятті `is_default` видаляються тільки автоматично призначені меню
-- **Індивідуальне призначення**: Адміністратор може призначати меню окремим користувачам вручну
-- **Масштабованість**: Працює автоматично для будь-якої кількості користувачів (5000+)
-
 ## Типи меню
 
-Система підтримує два типи меню (визначені в `mx_dic.menu_types`):
+Система підтримує три типи меню (визначені в `mx_dic.menu_types`):
 
-1. **`sections`** - Меню з секціями та пунктами
-   - Меню містить категорії (секції)
-   - Кожна категорія містить пункти меню
-   - Структура: Меню → Категорія → Пункт меню
+| Код        | Назва           | Структура                | Прив'язка до офісу |
+| ---------- | --------------- | ------------------------ | ------------------ |
+| `sections` | Меню з секціями | Меню → Категорія → Пункт | Так                |
+| `items`    | Меню з пунктами | Меню → Пункт             | Так                |
+| `general`  | Загальне меню   | Меню → Пункт             | Ні                 |
 
-2. **`items`** - Меню з пунктами
-   - Меню містить тільки пункти без категорій
-   - Структура: Меню → Пункт меню
+**sections** і **items** — офісні меню. Доступ до пункту залежить від того, для якого офісу він призначений користувачу. У сайдбарі відображається поточний (default) офіс.
+
+**general** — меню без прив'язки до офісу. Пункти відображаються завжди, незалежно від вибраного офісу.
+
+---
 
 ## Структура бази даних
 
-### Основні таблиці
+### Словникові таблиці (`mx_dic`)
 
-#### `mx_dic.menu_types` - Словник типів меню
-
-```sql
-- id (smallserial PRIMARY KEY)
-- code (text UNIQUE) - машинний код: 'sections', 'items'
-- title (text) - локалізована назва (українська)
-- sort_order (int) - порядок у селектах
-- is_active (boolean) - м'яка деактивація без видалення
-```
-
-#### `mx_dic.menus` - Таблиця меню
+#### `mx_dic.menu_types` — типи меню
 
 ```sql
-- id (SERIAL PRIMARY KEY)
-- title (text) - назва меню (видно над пунктами в сайдбарі)
-- menu_type_id (smallint FK) - тип меню (sections або items)
-- sort_order (int) - порядок відображення меню
-- is_active (boolean) - активність меню
-- created_at, updated_at (timestamptz)
+id          smallserial PRIMARY KEY
+code        text UNIQUE          -- 'sections', 'items', 'general'
+title       text                 -- локалізована назва
+sort_order  int
+is_active   boolean
 ```
 
-**Автоматичне управління `sort_order`:**
-
-- При створенні: автоматично призначається `MAX(sort_order) + 100`
-- При оновленні: автоматично перерозподіляються інші меню (для drag&drop)
-- При видаленні: автоматично ущільнюється порядок
-
-#### `mx_dic.menu_user_sections_category` - Категорії меню з секціями
+#### `mx_dic.menus` — таблиця меню
 
 ```sql
-- id (SERIAL PRIMARY KEY)
-- menu_id (int FK NOT NULL) - FK на mx_dic.menus.id
-- title (text) - назва категорії
-- url (text) - базовий URL категорії
-- icon (text) - назва іконки
-- is_active (boolean) - активність категорії
-- created_at, updated_at (timestamptz)
+id              SERIAL PRIMARY KEY
+title           text             -- назва над пунктами в сайдбарі
+menu_type_id    smallint FK      -- FK → mx_dic.menu_types
+sort_order      int              -- автоматично MAX+100 при створенні
+is_active       boolean
+created_at, updated_at  timestamptz
 ```
 
-#### `mx_dic.menu_user_sections_items` - Пункти меню в категоріях
+`sort_order` управляється тригерами автоматично (при створенні, оновленні, видаленні).
+
+#### `mx_dic.menu_user_sections_category` — категорії (для типу sections)
 
 ```sql
-- id (SERIAL PRIMARY KEY)
-- category_id (int FK) - FK на menu_user_sections_category.id
-- title (text) - назва пункту меню
-- icon (text) - іконка пункту меню
-- url (text) - URL пункту меню
-- sort_order (int) - порядок сортування в межах категорії
-- is_active (boolean) - активність пункту меню
-- is_default (boolean) - чи призначається автоматично новим користувачам при реєстрації та всім існуючим при встановленні
-- created_at, updated_at (timestamptz)
+id          SERIAL PRIMARY KEY
+menu_id     int FK              -- FK → mx_dic.menus
+title       text
+url         text
+icon        text
+is_active   boolean
 ```
 
-#### `mx_dic.menu_user_items` - Пункти меню без секцій
+#### `mx_dic.menu_user_sections_items` — пункти меню в категоріях
 
 ```sql
-- id (SERIAL PRIMARY KEY)
-- menu_id (int FK NOT NULL) - FK на mx_dic.menus.id
-- title (text) - назва пункту меню
-- icon (text) - іконка пункту меню
-- url (text) - URL пункту меню
-- sort_order (int) - порядок сортування
-- is_active (boolean) - активність пункту меню
-- is_default (boolean) - чи призначається автоматично новим користувачам при реєстрації та всім існуючим при встановленні
-- created_at, updated_at (timestamptz)
+id          SERIAL PRIMARY KEY
+category_id int FK              -- FK → menu_user_sections_category
+title       text
+icon        text
+url         text
+sort_order  int
+is_active   boolean
+is_default  boolean             -- пункт видно у всіх офісах без явного призначення
 ```
 
-#### `mx_dic.menu_app_support` - Меню підтримки додатку
+#### `mx_dic.menu_user_items` — пункти меню без секцій
 
 ```sql
-- id (SERIAL PRIMARY KEY)
-- menu_id (int FK NOT NULL) - FK на mx_dic.menus.id
-- title (text) - назва пункту меню
-- url (text) - URL пункту меню
-- icon (text) - іконка пункту меню
-- is_active (boolean) - активність пункту меню
+id          SERIAL PRIMARY KEY
+menu_id     int FK              -- FK → mx_dic.menus
+title       text
+icon        text
+url         text
+sort_order  int
+is_active   boolean
+is_default  boolean             -- пункт видно у всіх офісах без явного призначення
 ```
 
-**Примітка:** Меню підтримки - це єдине статичне меню типу `items`, яке завжди відображається внизу сайдбара над профілем користувача.
-
-#### Таблиці призначення меню користувачам
-
-##### `mx_system.nav_user_sections` - Призначення пунктів меню з секціями
+#### `mx_dic.menu_general_items` — пункти загального меню
 
 ```sql
-- id (SERIAL PRIMARY KEY)
-- user_id (text FK) - ідентифікатор користувача
-- menu_id (int FK) - FK на mx_dic.menu_user_sections_items.id
-- created_at (timestamptz) - дата/час надання доступу
-- created_by (text FK) - хто надав доступ (id користувача-адміністратора)
-- is_auto_assigned (boolean) - чи було призначено автоматично через тригер при встановленні is_default = true
+id          SERIAL PRIMARY KEY
+menu_id     int FK              -- FK → mx_dic.menus (type='general')
+title       text
+icon        text
+url         text
+sort_order  int
+is_active   boolean
+is_default  boolean             -- пункт видно всім користувачам без явного призначення
 ```
 
-##### `mx_system.nav_user_items` - Призначення пунктів меню без секцій
+#### `mx_dic.menu_app_support` — меню підтримки (статичне)
 
 ```sql
-- id (SERIAL PRIMARY KEY)
-- user_id (text FK) - ідентифікатор користувача
-- menu_id (int FK) - FK на mx_dic.menu_user_items.id
-- created_at (timestamptz) - дата/час надання доступу
-- created_by (text FK) - хто надав доступ (id користувача-адміністратора)
-- is_auto_assigned (boolean) - чи було призначено автоматично через тригер при встановленні is_default = true
+id          SERIAL PRIMARY KEY
+menu_id     int FK
+title       text
+url         text
+icon        text
+is_active   boolean
 ```
 
-**Важливо:** Поле `is_auto_assigned` використовується для відстеження автоматично призначених меню. При знятті `is_default = false` автоматично видаляються тільки записи з `is_auto_assigned = true`. Меню, призначені вручну адміністратором, залишаються без змін.
+Єдине статичне меню — завжди відображається внизу сайдбару над профілем. Не потребує призначень.
 
-### Тригери бази даних
+---
 
-#### `trg_menu_user_sections_items_au_assign_default` - Тригер для меню з секціями
+### Таблиці призначень (`mx_system`)
 
-Автоматично спрацьовує при зміні `is_default` для пунктів меню з секціями:
+#### `mx_system.nav_user_sections` — призначення пунктів з секціями
 
-- **При встановленні `is_default = true`**:
-  - Призначає пункт меню всім існуючим користувачам, які ще не мають його
-  - Встановлює `is_auto_assigned = true` для відстеження автоматичних призначень
-  - Перевіряє активність пункту меню, категорії та меню перед призначенням
+```sql
+id          SERIAL PRIMARY KEY
+user_id     text FK             -- FK → public."user"
+menu_id     int FK              -- FK → menu_user_sections_items.id
+office_id   int FK              -- FK → mx_dic.offices
+created_at  timestamptz
+created_by  text FK
+is_auto_assigned  boolean       -- зарезервовано, не використовується активно
+UNIQUE (user_id, menu_id, office_id)
+```
 
-- **При знятті `is_default = false`**:
-  - Видаляє тільки записи з `is_auto_assigned = true`
-  - Меню, призначені вручну (`is_auto_assigned = false`), залишаються без змін
+#### `mx_system.nav_user_items` — призначення пунктів без секцій
 
-#### `trg_menu_user_items_au_assign_default` - Тригер для меню без секцій
+```sql
+-- Ідентична структура до nav_user_sections
+UNIQUE (user_id, menu_id, office_id)
+```
 
-Автоматично спрацьовує при зміні `is_default` для пунктів меню без секцій:
+#### `mx_system.nav_user_general` — призначення пунктів загального меню
 
-- **При встановленні `is_default = true`**:
-  - Призначає пункт меню всім існуючим користувачам, які ще не мають його
-  - Встановлює `is_auto_assigned = true` для відстеження автоматичних призначень
-  - Перевіряє активність пункту меню та меню перед призначенням
+```sql
+id          SERIAL PRIMARY KEY
+user_id     text FK             -- FK → public."user"
+menu_id     int FK              -- FK → menu_general_items.id
+created_at  timestamptz
+created_by  text FK
+UNIQUE (user_id, menu_id)       -- без office_id
+```
 
-- **При знятті `is_default = false`**:
-  - Видаляє тільки записи з `is_auto_assigned = true`
-  - Меню, призначені вручну (`is_auto_assigned = false`), залишаються без змін
-
-**Функції тригерів:**
-
-- `mx_dic.fn_menu_user_sections_items_au_assign_default()` - для меню з секціями
-- `mx_dic.fn_menu_user_items_au_assign_default()` - для меню без секцій
+---
 
 ### Database Views
 
-#### `mx_system.nav_user_sections_user_view` - VIEW для користувача (секції)
+#### Принцип `is_default` у Views
 
-Містить інформацію про меню, категорії та пункти меню з секціями для відображення в сайдбарі:
+`is_default = true` реалізується виключно на рівні SQL View — тригери для автоматичного запису в таблиці призначень **не використовуються** (були вимкнені через неоднозначність `office_id`).
 
-```sql
-- user_id
-- menu_id, menu_title, menu_sort_order
-- category_id, category_title, category_url, category_icon, category_is_active
-- item_id, item_title, item_icon, item_url, item_sort_order, item_is_active_global
-```
-
-#### `mx_system.nav_user_sections_admin_view` - VIEW для адміністратора (секції)
-
-Містить повну матрицю користувач × меню × категорія × пункт меню для управління призначеннями:
+**Для офісних меню** (`nav_user_sections_user_view`, `nav_user_items_user_view`):
 
 ```sql
-- user_id, user_name
-- menu_id, menu_title, menu_sort_order
-- category_id, category_title, category_url, category_icon, category_is_active
-- item_id, item_title, item_icon, item_url, item_sort_order, item_is_active_global
-- item_is_assigned, item_is_effective_active
-- nav_user_section_id, created_at, created_by
+SELECT DISTINCT ON (u.id, i.id) ...
+FROM public."user" u
+JOIN mx_system.user_offices uo ON uo.user_id = u.id AND uo.is_default = TRUE
+CROSS JOIN mx_dic.menu_user_items i          -- всі пункти меню
+JOIN mx_dic.menus m ON m.id = i.menu_id
+WHERE m.is_active = TRUE AND i.is_active = TRUE
+  AND (
+      -- явно призначено для поточного офісу
+      EXISTS (
+          SELECT 1 FROM mx_system.nav_user_items nui
+          WHERE nui.user_id = u.id AND nui.menu_id = i.id AND nui.office_id = uo.office_id
+      )
+      OR
+      -- або загальнодоступний — видно у всіх офісах
+      i.is_default = TRUE
+  )
 ```
 
-#### `mx_system.nav_user_items_user_view` - VIEW для користувача (пункти)
+Пункт з `is_default = true` видно у **будь-якому поточному офісі** без запису в `nav_user_items`/`nav_user_sections`.
 
-Містить інформацію про меню та пункти меню без секцій для відображення в сайдбарі:
+**Для загального меню** (`nav_user_general_user_view`):
 
 ```sql
-- user_id
-- menu_id, menu_title, menu_sort_order
-- item_id, item_title, item_icon, item_url, item_sort_order, item_is_active_global
+SELECT DISTINCT ON (u.id, i.id) ...
+FROM public."user" u
+CROSS JOIN mx_dic.menu_general_items i
+JOIN mx_dic.menus m ON m.id = i.menu_id
+WHERE m.is_active = TRUE AND i.is_active = TRUE
+  AND (
+      EXISTS (SELECT 1 FROM mx_system.nav_user_general nug
+              WHERE nug.user_id = u.id AND nug.menu_id = i.id)
+      OR i.is_default = TRUE
+  )
 ```
 
-#### `mx_system.nav_user_items_admin_view` - VIEW для адміністратора (пункти)
+Пункт з `is_default = true` видно **всім користувачам** без будь-яких записів у `nav_user_general`.
 
-Містить повну матрицю користувач × меню × пункт меню для управління призначеннями:
+#### Admin views (`*_admin_view`)
 
-```sql
-- user_id, user_name
-- menu_id, menu_title, menu_sort_order
-- item_id, item_title, item_icon, item_url, item_sort_order, item_is_active_global
-- item_is_assigned, item_is_effective_active
-- nav_user_item_id, created_at, created_by
-```
+CROSS JOIN матриця `user × office × item` (або `user × item` для general). Повертає всі можливі комбінації, для кожної `item_is_assigned = (record IS NOT NULL)`. Фільтрація за `user_id` і `office_id[]` — в TypeScript-запиті.
 
-## Функціонал для адміністратора
+---
 
-### Створення меню
+## Поле `is_default` — семантика
 
-Адміністратор може створювати нові меню через форму "Створити нове меню":
+| Тип меню             | `is_default = true` означає                         |
+| -------------------- | --------------------------------------------------- |
+| `sections` / `items` | Пункт видно у **всіх офісах** поточного користувача |
+| `general`            | Пункт видно **всім користувачам** системи           |
 
-1. **Назва меню** - назва, яка буде відображатися над пунктами меню в сайдбарі
-2. **Тип меню** - вибір між "sections" (з секціями) або "items" (тільки пункти)
-3. **Іконка** - опціональна іконка для меню (не обов'язково)
+`is_default` — це ознака "публічного за замовчуванням". Вона не записує дані в таблиці призначень і не потребує тригерів. Логіка реалізована у View.
 
-Після створення меню автоматично отримує `sort_order = MAX(sort_order) + 100`.
+---
 
-### Редагування меню
+## Функціонал адміністратора
 
-Для кожного меню доступні операції:
+### Конструктор меню (`/mx-admin/menu-app`)
 
-- **Редагування назви** - inline редагування через `EditDbMaxsa`
-- **Переключення активності** - через Switch компонент
-- **Ранжування** - drag-and-drop для зміни порядку відображення
-- **Видалення** - з підтвердженням через AlertDialog
+Вкладки: **Секції** | **Пункти** | **Загальне** | **Підтримка**
 
-### Створення категорій (для меню типу "sections")
+Вкладки **Секції**, **Пункти** та **Загальне** підтримують кілька незалежних меню кожна. Адміністратор може створювати нові меню через кнопку "Створити нове меню" і сортувати їх drag-and-drop.
 
-Для меню з секціями адміністратор може створювати категорії:
+**Для кожного меню:**
 
-1. **Назва категорії** - назва секції меню
-2. **URL категорії** - базовий URL для секції
-3. **Іконка категорії** - іконка для відображення секції
+- Inline редагування назви
+- Перемикач активності (`is_active`)
+- Drag-and-drop для порядку між меню
+- Видалення з підтвердженням
 
-### Створення пунктів меню
+**Для кожного пункту меню:**
 
-Для кожного меню (або категорії) адміністратор може створювати пункти меню:
+- Inline редагування назви та URL
+- Вибір іконки через `IconPicker`
+- Drag-and-drop для порядку пунктів всередині меню
+- Перемикач активності (`is_active`) — вимкнений пункт зникає з сайдбару для всіх
+- Перемикач `is_default` (зірочка) — лише у вкладках **Пункти** та **Загальне**; активний пункт видно без явного призначення
 
-1. **Назва пункту** - назва пункту меню
-2. **URL пункту** - URL для навігації
-3. **Іконка пункту** - іконка для відображення пункту
+### Призначення меню користувачу (`/mx-admin/user-data/[user_id]`)
 
-Пункти меню автоматично отримують `sort_order = MAX(sort_order) + 100` в межах категорії або меню.
+Вкладки: **Меню** | **Загальне**
 
-### Редагування пунктів меню
+**Вкладка "Меню"** — офісні секції та пункти:
 
-Для кожного пункту меню доступні операції:
+- Ліва панель: мультиселект офісів (один або декілька)
+- Права панель: пункти меню з бейджами офісів
+- Single-office режим: клік перемикає для одного офісу
+- Multi-office режим: клік перемикає для всіх вибраних офісів одночасно (алгоритм "найменшого знаменника")
+- Клік на категорію — bulk toggle всіх пунктів категорії
 
-- **Редагування назви** - inline редагування через `EditDbMaxsa`
-- **Редагування URL** - inline редагування через `EditDbMaxsa`
-- **Зміна іконки** - через `IconPicker` з пошуком
-- **Ранжування** - drag-and-drop для зміни порядку (в межах категорії або меню)
-- **Переключення активності** - через Switch компонент (`is_active`)
-  - Вимкнення: меню зникає з сайдбару у всіх користувачів (через фільтр VIEW)
-  - Увімкнення: меню знову з'являється у користувачів, яким воно було призначене
-- **Меню за замовчуванням** - через Switch компонент (`is_default`)
-  - При встановленні: автоматично призначається всім користувачам через тригер БД
-  - При знятті: автоматично видаляється тільки у тих, хто отримав його автоматично (`is_auto_assigned = true`)
-- **Видалення** - з підтвердженням через AlertDialog
+**Вкладка "Загальне"** — пункти загального меню:
 
-### Визначення меню для користувачів
+- Список всіх пунктів загального меню
+- Клік призначає/знімає для конкретного користувача
+- Пункти з `is_default = true` — видні незалежно від призначення (позначені візуально)
 
-На сторінці користувача (`/mx-admin/user-data/[user_id]`) адміністратор може:
-
-1. **Переглядати всі меню** - згруповані по назвах меню (`menu_title`)
-2. **Призначати пункти меню** - клік по пункту меню призначає/знімає його для користувача
-   - Для меню з секціями: клік по пункту меню всередині категорії
-   - Для меню з пунктами: клік по пункту меню
-   - Призначення зберігається в таблиці `mx_system.nav_user_items` або `mx_system.nav_user_sections`
-3. **Призначати категорії** - клік по категорії призначає/знімає всі пункти в категорії для користувача
-   - Для меню з секціями: клік по назві категорії призначає всі пункти меню в цій категорії
-
-**Візуальна індикація:**
-
-- Призначені пункти меню відображаються з активним Switch
-- Непризначені пункти меню відображаються з неактивним Switch
-- При зміні стану Switch автоматично оновлюється сайдбар користувача через `revalidatePath('/(protected)', 'layout')`
-
-## Відображення в сайдбарі
-
-### Групування по меню
-
-Меню відображаються в сайдбарі згруповані по назвах меню:
-
-1. **Меню з секціями** - кожне меню відображається з власною назвою
-   - Назва меню відображається як label над секціями
-   - Секції відображаються з підменю (collapsible)
-   - Пункти меню відображаються всередині секцій
-
-2. **Меню з пунктами** - кожне меню відображається з власною назвою
-   - Назва меню відображається як label над пунктами
-   - Пункти меню відображаються списком
-
-3. **Меню підтримки** - єдине меню внизу сайдбара
-   - Завжди відображається над профілем користувача
-   - Містить тільки активні пункти меню
-
-### Порядок відображення
-
-Меню відображаються в порядку, визначеному `sort_order`:
-
-- Спочатку меню з найменшим `sort_order`
-- Всередині меню - категорії та пункти в порядку їх `sort_order`
+---
 
 ## Структура файлів
 
-### SQL схеми
+### SQL
 
 ```
-sql/
-├── mx_dic/
-│   ├── menu_types.sql              # Словник типів меню
-│   ├── menus.sql                   # Таблиця меню
-│   ├── menus_fn.sql                # Функції та тригери для sort_order
-│   ├── menu_user_sections.sql      # Таблиці меню з секціями
-│   ├── menu_user_items.sql         # Таблиця меню з пунктами
-│   ├── menu_app_support.sql        # Таблиця меню підтримки
-│   └── menu_default_fn.sql         # Функції та тригери для автоматичного призначення меню за замовчуванням
-├── mx-system/
-│   ├── nav_user_sections.sql       # Таблиця призначення меню з секціями та VIEW
-│   └── nav_user_items.sql          # Таблиця призначення меню без секцій та VIEW
-└── migrations/
-    ├── 001_menu_system_add_menu_id.sql
-    ├── 002_menu_system_migrate_existing_data.sql
-    ├── 003_menu_system_add_menu_info_to_views.sql
-    ├── 004_menu_system_add_is_default.sql
-    └── 005_menu_system_add_is_auto_assigned.sql
+sql/mx_dic/
+├── menu_types.sql              # Словник типів меню
+├── menus.sql                   # Таблиця меню
+├── menus_fn.sql                # Тригери sort_order
+├── menu_user_sections.sql      # Категорії + пункти секційного меню
+├── menu_user_items.sql         # Пункти плоского меню
+├── menu_general_items.sql      # Пункти загального меню
+└── menu_app_support.sql        # Пункти меню підтримки
+
+sql/mx_system/
+├── nav_user_sections.sql       # Призначення sections + обидва Views
+├── nav_user_items.sql          # Призначення items + обидва Views
+└── nav_user_general.sql        # Призначення general + обидва Views
+
+sql/migrations/
+├── 001–007_*.sql               # Поступова еволюція схеми (додавання office_id тощо)
+├── 008_general_menu.sql        # Загальне меню: таблиці + Views
+├── 009_general_menu_is_default_view.sql  # is_default для general у View
+└── 010_menu_is_default_for_all_offices.sql  # is_default для sections/items у Views
 ```
 
-### TypeScript інтерфейси
+### TypeScript
 
 ```
 interfaces/mx-dic/
-├── menu-types.ts                   # MenuType
-├── menus.ts                        # Menu
-├── menu-user-sections.ts          # MenuUserSectionsCategory, MenuUserSectionsItems
-├── menu-user-items.ts             # MenuUserItems
-└── menu-app-support.ts            # MenuAppSupport
+├── menus.ts
+├── menu-types.ts
+├── menu-user-sections.ts       # MenuUserSectionsCategory, MenuUserSectionsItems
+├── menu-user-items.ts          # MenuUserItems
+├── menu-general-items.ts       # MenuGeneralItems
+└── menu-app-support.ts
 
 interfaces/mx-system/
-├── nav-user-sections.ts           # NavUserSectionsAdminView, NavUserSectionsUserView
-└── nav-user-items.ts              # NavUserItemsAdminView, NavUserItemsUserView
-```
+├── nav-user-sections.ts        # NavUserSectionsAdminView, NavUserSectionsUserView
+├── nav-user-items.ts           # NavUserItemsAdminView, NavUserItemsUserView
+└── nav-user-general.ts         # NavUserGeneralAdminView, NavUserGeneralUserView
 
-### Data layer
-
-```
 data/mx-dic/
-├── menus.ts                        # Функції роботи з меню (CRUD, reorder)
-└── menu-admin.ts                  # Функції роботи з пунктами меню (CRUD, is_default)
+├── menus.ts                    # CRUD меню
+├── menu-admin.ts               # CRUD пунктів (sections, items)
+└── menu-general.ts             # CRUD пунктів загального меню
 
 data/mx-system/
-├── nav-user-sections.ts           # Функції отримання даних з VIEW та призначення меню
-└── nav-user-items.ts              # Функції отримання даних з VIEW та призначення меню
+├── nav-user-sections.ts
+├── nav-user-items.ts
+└── nav-user-general.ts
 
-lib/auth/
-└── assign-default-menu.ts         # Функції призначення меню за замовчуванням новим та існуючим користувачам
-```
-
-### Server Actions
-
-```
 actions/mx-admin/menu/
-├── menus.ts                        # CRUD операції для меню
-├── create-menu-items.ts            # Створення пунктів меню
-├── update-menu-fields.ts           # Оновлення полів (title, url, icon)
-├── toggle-menu-active.ts           # Переключення активності (is_active)
-├── toggle-menu-default.ts          # Переключення меню за замовчуванням (is_default)
-├── assign-default-menu-to-all.ts   # Призначення меню за замовчуванням всім існуючим користувачам
-└── delete-menu-items.ts            # Видалення пунктів меню
+├── create-menu-items.ts
+├── update-menu-fields.ts
+├── toggle-menu-active.ts
+├── toggle-menu-default.ts      # is_default для sections, items, general
+└── delete-menu-items.ts
 
-actions/auth/
-└── register.ts                     # Реєстрація користувача (викликає assignDefaultMenuToUser)
-```
-
-### Компоненти
-
-```
 components/mx-admin/menu/
-├── menu-tabs-wrapper.tsx           # Обгортка для Tabs
-├── menu-user-sections.tsx          # Компонент меню з секціями
-├── menu-user-items.tsx             # Компонент меню з пунктами
-├── menu-app-support.tsx            # Компонент меню підтримки
-├── create-menu-form.tsx            # Форма створення меню
-├── sortable-menu-card.tsx          # Картка меню з drag&drop
-├── sortable-menu-wrapper.tsx       # Обгортка для drag&drop пунктів
-└── add-menu-item-form.tsx         # Форма додавання пунктів меню
+├── menu-tabs-wrapper.tsx       # Контейнер вкладок конструктора
+├── menu-user-sections.tsx      # Конструктор секційного меню
+├── menu-user-items.tsx         # Конструктор плоского меню
+├── menu-general.tsx            # Конструктор загального меню
+└── menu-app-support.tsx        # Конструктор меню підтримки
 ```
+
+---
 
 ## Порядок виконання міграцій
 
-Для нової установки виконайте файли в такому порядку:
+### Нова БД
 
-```sql
--- 1. Створення словника типів меню
-\i sql/mx_dic/menu_types.sql
-
--- 2. Створення таблиці меню
-\i sql/mx_dic/menus.sql
-
--- 3. Створення функцій та тригерів для автоматичного управління sort_order
-\i sql/mx_dic/menus_fn.sql
-
--- 4. Створення таблиць меню з новою структурою
-\i sql/mx_dic/menu_user_sections.sql
-\i sql/mx_dic/menu_user_items.sql
-\i sql/mx_dic/menu_app_support.sql
-
--- 5. Створення таблиць призначення меню користувачам та VIEW для навігації
-\i sql/mx-system/nav_user_sections.sql
-\i sql/mx-system/nav_user_items.sql
-
--- 6. Створення функцій та тригерів для автоматичного призначення меню за замовчуванням
-\i sql/mx_dic/menu_default_fn.sql
+```bash
+psql -d your_db -f sql/migrations/clear_database_create_db_for_new_app.sql
 ```
 
-Для існуючої бази даних виконайте міграції:
+### Жива БД (покрокова)
 
-```sql
--- 1-3. Створення нових таблиць (як вище)
-
--- 4. Додавання поля menu_id до існуючих таблиць
-\i sql/migrations/001_menu_system_add_menu_id.sql
-
--- 5. Міграція існуючих даних
-\i sql/migrations/002_menu_system_migrate_existing_data.sql
-
--- 6. Оновлення VIEW
-\i sql/migrations/003_menu_system_add_menu_info_to_views.sql
-
--- 7. Додавання поля is_default та триггерів для автоматичного призначення
-\i sql/migrations/004_menu_system_add_is_default.sql
-
--- 8. Додавання поля is_auto_assigned для відстеження автоматичних призначень
-\i sql/migrations/005_menu_system_add_is_auto_assigned.sql
+```bash
+psql -d your_db -f sql/migrations/001_menu_system_add_menu_id.sql
+psql -d your_db -f sql/migrations/002_menu_system_migrate_existing_data.sql
+psql -d your_db -f sql/migrations/003_menu_system_add_menu_info_to_views.sql
+psql -d your_db -f sql/migrations/004_menu_system_add_is_default.sql
+psql -d your_db -f sql/migrations/005_menu_system_add_is_auto_assigned.sql
+psql -d your_db -f sql/migrations/006_user_offices_add_is_default.sql
+psql -d your_db -f sql/migrations/007_nav_menu_add_office_id.sql
+psql -d your_db -f sql/migrations/008_general_menu.sql
+psql -d your_db -f sql/migrations/009_general_menu_is_default_view.sql
+psql -d your_db -f sql/migrations/010_menu_is_default_for_all_offices.sql
 ```
-
-## Приклади використання
-
-### Створення меню з секціями
-
-1. Адміністратор натискає "Створити нове меню"
-2. Вводить назву: "Основне меню"
-3. Вибирає тип: "Меню з секціями та пунктами"
-4. Після створення може додавати категорії та пункти меню
-
-### Створення меню з пунктами
-
-1. Адміністратор натискає "Створити нове меню"
-2. Вводить назву: "Швидкий доступ"
-3. Вибирає тип: "Меню з пунктами"
-4. Після створення може додавати пункти меню без категорій
-
-### Призначення меню користувачу
-
-#### Індивідуальне призначення
-
-1. Адміністратор переходить на сторінку користувача (`/mx-admin/user-data/[user_id]`)
-2. Бачить всі меню, згруповані по назвах
-3. Клікає по пункту меню або категорії для призначення/зняття
-4. Меню автоматично з'являється/зникає в сайдбарі користувача
-5. Такі призначення мають `is_auto_assigned = false` і не видаляються при знятті `is_default`
-
-#### Меню за замовчуванням
-
-1. Адміністратор переходить на сторінку управління меню (`/mx-admin/menu-app`)
-2. Встановлює Switch "Меню за замовчуванням" для потрібного пункту меню
-3. Меню автоматично призначається:
-   - Всім існуючим користувачам через тригер бази даних
-   - Всім новим користувачам при реєстрації
-4. При знятті Switch "Меню за замовчуванням":
-   - Автоматично видаляються тільки записи з `is_auto_assigned = true`
-   - Меню, призначені вручну, залишаються без змін

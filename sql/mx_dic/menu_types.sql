@@ -16,11 +16,12 @@ CREATE TABLE IF NOT EXISTS mx_dic.menu_types (
 );
 
 COMMENT ON TABLE mx_dic.menu_types IS
-'Словник типів меню: sections (з секціями та пунктами), items (тільки пункти).';
+'Словник типів меню: sections (з секціями та пунктами), items (тільки пункти), general (загальне — без офісу).';
 
 -- Початкове наповнення (ідемпотентне)
 INSERT INTO mx_dic.menu_types (code, title, sort_order) VALUES
  ('sections', 'Меню з секціями та пунктами', 10),
- ('items',    'Меню з пунктами',              20)
+ ('items',    'Меню з пунктами',              20),
+ ('general',  'Загальне меню (без офісу)',    30)
 ON CONFLICT (code) DO NOTHING;
 

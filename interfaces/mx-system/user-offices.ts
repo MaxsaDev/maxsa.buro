@@ -2,6 +2,7 @@ export interface UserOffice {
   id: number;
   user_id: string;
   office_id: number;
+  is_default: boolean;
   created_at: Date;
   created_by: string;
 }
@@ -18,6 +19,7 @@ export interface UserOfficeAdminView {
 
   office_is_assigned: boolean;
   office_is_effective_active: boolean;
+  office_is_default: boolean;
 
   user_office_id: number | null;
   created_at: Date | null;
@@ -33,4 +35,5 @@ export interface UserOfficeUserView {
   office_address: string | null;
   office_phone: string | null;
   office_email: string | null;
+  office_is_default: boolean;
 }

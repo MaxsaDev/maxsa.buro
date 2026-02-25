@@ -1,4 +1,8 @@
-import type { UserOffice, UserOfficeAdminView } from '@/interfaces/mx-system/user-offices';
+import type {
+  UserOffice,
+  UserOfficeAdminView,
+  UserOfficeUserView,
+} from '@/interfaces/mx-system/user-offices';
 import { pool } from '@/lib/db';
 
 /**
@@ -30,6 +34,31 @@ export async function getUserOfficesAdminViewByUserId(
 }
 
 /**
+ * Отримати призначені активні офіси для користувача
+ * Використовує VIEW: mx_system.user_offices_user_view
+ */
+export async function getUserOfficesUserViewByUserId(
+  userId: string
+): Promise<UserOfficeUserView[]> {
+  const client = await pool.connect();
+  try {
+    const sql = `
+      SELECT *
+      FROM mx_system.user_offices_user_view
+      WHERE user_id = $1
+      ORDER BY office_is_default DESC, office_id;
+    `;
+    const result = await client.query<UserOfficeUserView>(sql, [userId]);
+    return result.rows;
+  } catch (error) {
+    console.error('[getUserOfficesUserViewByUserId] Помилка отримання офісів користувача:', error);
+    throw new Error('Не вдалося отримати офіси користувача');
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Призначити офіс користувачу
  */
 export async function insertUserOffice(
@@ -51,6 +80,30 @@ export async function insertUserOffice(
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('[insertUserOffice] Помилка призначення офісу користувачу:', error);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Встановити офіс за замовчуванням для користувача
+ * Тригер в БД автоматично скине is_default у всіх інших офісів
+ */
+export async function updateUserOfficeDefault(userId: string, officeId: number): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const sql =
+      'UPDATE mx_system.user_offices SET is_default = TRUE WHERE user_id = $1 AND office_id = $2';
+    const result = await client.query(sql, [userId, officeId]);
+    if (result.rowCount === 0) {
+      throw new Error('Офіс не знайдено серед призначених для цього користувача');
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('[updateUserOfficeDefault] Помилка встановлення офісу за замовчуванням:', error);
     throw error;
   } finally {
     client.release();

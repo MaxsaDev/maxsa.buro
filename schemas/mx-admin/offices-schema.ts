@@ -42,7 +42,7 @@ export const officeEmailSchema = z
   .refine(
     (val) => {
       if (val.trim() === '') return true;
-      return z.string().email().safeParse(val).success;
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
     },
     { message: 'Некоректна email адреса' }
   );
@@ -56,3 +56,29 @@ export const officeEmailSchema = z
 export const officePhoneSchema = z
   .string()
   .max(50, { message: 'Номер телефону не може бути довшим за 50 символів' });
+
+/**
+ * Схема валідації для координат офісу (широта/довгота)
+ *
+ * Правила:
+ * - Порожній рядок (очищення) або числове значення
+ * - Широта: від -90 до 90
+ * - Довгота: від -180 до 180
+ */
+export const officeLatitudeSchema = z.string().refine(
+  (val) => {
+    if (val.trim() === '') return true;
+    const num = parseFloat(val);
+    return !isNaN(num) && num >= -90 && num <= 90;
+  },
+  { message: 'Широта повинна бути числом від -90 до 90' }
+);
+
+export const officeLongitudeSchema = z.string().refine(
+  (val) => {
+    if (val.trim() === '') return true;
+    const num = parseFloat(val);
+    return !isNaN(num) && num >= -180 && num <= 180;
+  },
+  { message: 'Довгота повинна бути числом від -180 до 180' }
+);

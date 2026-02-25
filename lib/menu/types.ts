@@ -30,3 +30,13 @@ export interface MenuItem {
   url: string;
   icon: string; // Рядкове ім'я іконки
 }
+
+export interface MenuGeneralItem {
+  menuId: number;
+  menuTitle: string;
+  menuSortOrder: number;
+  id?: number;
+  name: string;
+  url: string;
+  icon: string; // Рядкове ім'я іконки
+}

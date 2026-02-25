@@ -196,7 +196,7 @@ export const loginAction = async (
         console.log('[Login] ✅ Успішний вхід для:', email);
       }
 
-      redirect('/dashboard');
+      redirect('/mx-job');
     } catch (authError) {
       // НЕ логуємо NEXT_REDIRECT - це нормальна робота redirect()
       if (authError instanceof Error && authError.message === 'NEXT_REDIRECT') {

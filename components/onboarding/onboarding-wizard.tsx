@@ -75,7 +75,7 @@ const STEPS = [
  * Покроковий процес:
  * 1. Введення повного імені (українська кирилиця)
  * 2. Додавання контактів (мінімум 1)
- * 3. Підтвердження та перенаправлення на Dashboard
+ * 3. Підтвердження та перенаправлення на робочий простір
  */
 export function OnboardingWizard() {
   const user = useUser();
@@ -229,7 +229,7 @@ export function OnboardingWizard() {
         toast.success(result.message);
         // Перенаправлення через 2 секунди
         setTimeout(() => {
-          router.push('/dashboard');
+          router.push('/mx-job');
         }, 2000);
       } else {
         toast.error(result.message);

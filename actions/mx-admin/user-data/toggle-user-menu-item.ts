@@ -3,22 +3,22 @@
 import { revalidatePath } from 'next/cache';
 
 import {
-  deleteNavUserItemsByUserId,
-  insertNavUserItemsByUserId,
+  deleteNavUserItemsByUserAndOffice,
+  insertNavUserItemsByUserAndOffice,
 } from '@/data/mx-system/nav-user-items';
 import type { ActionStatus } from '@/interfaces/action-status';
 import { getCurrentUser } from '@/lib/auth/auth-server';
 
 /**
- * Server Action для активації/деактивації пункту меню для користувача
+ * Server Action для активації/деактивації пункту меню для користувача в конкретному офісі
  */
 export async function toggleUserMenuItemAction(
   userId: string,
   menuId: number,
+  officeId: number,
   isActive: boolean
 ): Promise<ActionStatus> {
   try {
-    // Перевірка авторизації
     const admin = await getCurrentUser();
 
     if (!admin) {
@@ -29,7 +29,6 @@ export async function toggleUserMenuItemAction(
       };
     }
 
-    // Перевірка ролі адміністратора
     if (admin.role !== 'admin') {
       return {
         status: 'error',
@@ -39,22 +38,13 @@ export async function toggleUserMenuItemAction(
     }
 
     if (isActive) {
-      // Активація: додаємо запис
-      await insertNavUserItemsByUserId(userId, menuId, admin.id);
-      console.log(
-        `[toggleUserMenuItemAction] Пункт меню ${menuId} активовано для користувача ${userId}`
-      );
+      await insertNavUserItemsByUserAndOffice(userId, menuId, officeId, admin.id);
     } else {
-      // Деактивація: видаляємо запис
-      await deleteNavUserItemsByUserId(userId, menuId);
-      console.log(
-        `[toggleUserMenuItemAction] Пункт меню ${menuId} деактивовано для користувача ${userId}`
-      );
+      await deleteNavUserItemsByUserAndOffice(userId, menuId, officeId);
     }
 
-    // Ревалідуємо сторінку адмін-панелі та layout для користувача
     revalidatePath(`/mx-admin/user-data/${userId}`);
-    revalidatePath('/(protected)', 'layout'); // Оновлюємо layout для оновлення меню користувача
+    revalidatePath('/(protected)', 'layout');
 
     return {
       status: 'success',
@@ -64,11 +54,7 @@ export async function toggleUserMenuItemAction(
     console.error('[toggleUserMenuItemAction] Помилка зміни статусу пункту меню:', error);
 
     if (error instanceof Error) {
-      return {
-        status: 'error',
-        message: error.message,
-        code: 'DB_ERROR',
-      };
+      return { status: 'error', message: error.message, code: 'DB_ERROR' };
     }
 
     return {

@@ -86,25 +86,9 @@ export function MenuAppSupport({ items, menuId }: MenuAppSupportProps) {
   return (
     <div className="space-y-4">
       {/* Заголовок з лічильником */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold">Пункти підтримки</h3>
-          <p className="text-muted-foreground text-sm">{pluralizeItems(items.length)}</p>
-        </div>
-        {items.length > 0 && (
-          <AddMenuItemForm
-            triggerLabel="Додати пункт"
-            onCreate={async (title, url, icon) => {
-              const result = await createMenuAppSupportAction(menuId, title, url, icon);
-              if (result.status === 'success') {
-                router.refresh();
-              }
-              return result;
-            }}
-            titlePlaceholder="Назва пункту меню"
-            urlPlaceholder="URL пункту меню"
-          />
-        )}
+      <div>
+        <h3 className="text-lg font-semibold">Пункти підтримки</h3>
+        <p className="text-muted-foreground text-sm">{pluralizeItems(items.length)}</p>
       </div>
 
       {items.length > 0 ? (
@@ -194,7 +178,24 @@ export function MenuAppSupport({ items, menuId }: MenuAppSupportProps) {
             Немає пунктів підтримки. Додайте перший пункт.
           </p>
           <AddMenuItemForm
-            triggerLabel="Додати пункт"
+            triggerLabel="Додати пункт меню"
+            onCreate={async (title, url, icon) => {
+              const result = await createMenuAppSupportAction(menuId, title, url, icon);
+              if (result.status === 'success') {
+                router.refresh();
+              }
+              return result;
+            }}
+            titlePlaceholder="Назва пункту меню"
+            urlPlaceholder="URL пункту меню"
+          />
+        </div>
+      )}
+
+      {items.length > 0 && (
+        <div className="flex justify-start">
+          <AddMenuItemForm
+            triggerLabel="Додати пункт меню"
             onCreate={async (title, url, icon) => {
               const result = await createMenuAppSupportAction(menuId, title, url, icon);
               if (result.status === 'success') {
