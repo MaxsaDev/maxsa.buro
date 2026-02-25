@@ -42,7 +42,7 @@ export const sendEmail = async ({ to, subject, html }: SendEmailOptions) => {
 // Публічний URL логотипу — email-клієнти блокують data: URI, тому використовуємо абсолютний URL
 const getLogoImg = () => {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://maxsa.com.ua';
-  return `<img src="${baseUrl}/favicon/favicon-96x96.png" width="64" height="64" alt="Maxsa Buro" style="display:block;" />`;
+  return `<img src="${baseUrl}/favicon/favicon-96x96.png" width="64" height="64" alt="Maxsa Buro" style="display:inline-block;border:0;outline:none;" />`;
 };
 
 const BASE_STYLES = `
@@ -99,7 +99,13 @@ const BASE_STYLES = `
   /* ── Логотип між хедером і контентом ── */
   .email-logo-block {
     background-color: #ffffff;
-    padding: 32px 48px 24px;
+    padding: 32px 48px 32px;
+    text-align: center;
+  }
+
+  .email-logo-block img {
+    display: inline-block;
+    margin: 0 auto;
   }
 
   /* ── Золота розділова лінія ── */
