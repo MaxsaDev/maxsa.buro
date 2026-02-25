@@ -15,6 +15,7 @@ import { AWS_S3_STORAGE_URL } from '@/lib/const';
 export function buildAvatarUrl(imagePath: string | null | undefined): string | null {
   if (!imagePath) return null;
 
-  const normalizedPath = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
+  // AWS_S3_STORAGE_URL закінчується на '/', тому видаляємо провідний '/' з imagePath
+  const normalizedPath = imagePath.startsWith('/') ? imagePath.slice(1) : imagePath;
   return `${AWS_S3_STORAGE_URL}${normalizedPath}`;
 }
