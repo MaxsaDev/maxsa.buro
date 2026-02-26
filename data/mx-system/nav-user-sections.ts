@@ -190,7 +190,7 @@ export async function getNavUserSectionsUserViewByUserId(
       SELECT *
       FROM mx_system.nav_user_sections_user_view
       WHERE user_id = $1
-      ORDER BY category_id, item_sort_order, item_id;
+      ORDER BY menu_sort_order, menu_id, category_id, item_sort_order, item_id;
     `;
     const result = await client.query<NavUserSectionsUserView>(sql, [userId]);
     return result.rows;

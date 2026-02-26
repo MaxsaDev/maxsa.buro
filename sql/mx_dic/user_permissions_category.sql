@@ -15,4 +15,4 @@ CREATE TABLE IF NOT EXISTS mx_dic.user_permissions_category
 
 
 INSERT INTO mx_dic.user_permissions_category (title, description, icon, is_active) VALUES
- ('Документація', 'Створення документації застосунку', 'CircleCheck', true);
+ ('Призначення', 'Призначення працівників та виконавців', 'CircleCheck', true);

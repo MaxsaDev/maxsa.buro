@@ -58,10 +58,7 @@ COMMENT ON COLUMN mx_dic.menu_user_sections_items.is_default IS
     'Якщо true, пункт меню автоматично призначається новим користувачам при реєстрації та всім існуючим користувачам при встановленні';
 
 INSERT INTO mx_dic.menu_user_sections_items (category_id, title, icon, url, sort_order, is_active, is_default) VALUES
- (1, 'Перший пункт', 'Dashboard', '/dashboard', 100, true, false),
- (1, 'Другий пункт', 'Profile', '/profile', 200, true, false),
- (2, 'Перший пункт', 'Dashboard', '/dashboard', 100, true, false),
- (2, 'Другий пункт', 'Profile', '/profile', 200, true, false);
+ (1, 'Головна', 'Dashboard', '/dashboard', 100, true, false);
 
 -- =========================================================
 -- Створення функцій та триггерів для автоматичного призначення
