@@ -27,6 +27,7 @@ import type { ExtendedUser } from '@/lib/auth/auth-types';
 import { buildAvatarUrl } from '@/lib/avatar/build-avatar-url';
 import { getMenuIcon } from '@/lib/icon/get-menu-icon';
 import { useUserMenuStore } from '@/store/user-menu/user-menu-store';
+import { Version } from './version';
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   user: ExtendedUser;
@@ -291,6 +292,7 @@ export function AppSidebar({ user, appSupportMenu, userOffices, ...props }: AppS
           }}
           menuItems={userProfileWithIcons}
         />
+        <Version />
       </SidebarFooter>
     </Sidebar>
   );

@@ -5,8 +5,8 @@ import { revalidatePath } from 'next/cache';
 import {
   createMenu,
   deleteMenu,
+  reorderMenusSortOrder,
   updateMenuActive,
-  updateMenuSortOrder,
   updateMenuTitle,
 } from '@/data/mx-dic/menus';
 import type { ActionStatus } from '@/interfaces/action-status';
@@ -243,8 +243,8 @@ export async function reorderMenusAction(
       };
     }
 
-    // Оновлюємо порядок для кожного меню
-    await Promise.all(reorderedMenus.map((menu) => updateMenuSortOrder(menu.id, menu.sort_order)));
+    // Оновлюємо порядок меню послідовно в одній транзакції (запобігає deadlock)
+    await reorderMenusSortOrder(reorderedMenus);
 
     // Ревалідуємо сторінку налаштувань меню
     revalidatePath('/mx-admin/menu-app');

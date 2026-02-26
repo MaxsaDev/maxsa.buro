@@ -131,6 +131,33 @@ export async function updateMenuSortOrder(id: number, sortOrder: number): Promis
 }
 
 /**
+ * Масове оновлення порядку меню в одній транзакції (послідовно, без deadlock)
+ * Триггер fn_menus_bu_sort_order_reorder перерозподіляє сусідів при кожному UPDATE,
+ * тому всі оновлення мають виконуватись послідовно в межах однієї транзакції.
+ */
+export async function reorderMenusSortOrder(
+  menus: Array<{ id: number; sort_order: number }>
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const menu of menus) {
+      await client.query(
+        'UPDATE mx_dic.menus SET sort_order = $1, updated_at = now() WHERE id = $2',
+        [menu.sort_order, menu.id]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('[reorderMenusSortOrder] Помилка оновлення порядку меню:', error);
+    throw new Error('Не вдалося оновити порядок меню');
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Видалити меню
  */
 export async function deleteMenu(id: number): Promise<void> {
